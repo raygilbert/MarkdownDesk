@@ -448,27 +448,32 @@ test('renders ==highlight== as mark tag and losslessly roundtrips', async () => 
   dom.window.close();
 });
 
-test('renders pr1_feedback_resolution_plan.md with mermaid diagram and callouts intact', async () => {
+test('renders sample-diagrams-and-callouts.md with mermaid diagrams and callouts intact', async () => {
   const dom = await editorWindow();
-  const filePath = '/home/mbidewell/.gemini/antigravity-cli/brain/99ccd453-aa21-4d36-b958-fb4ae5a1a6fa/pr1_feedback_resolution_plan.md';
+  const filePath = path.join(__dirname, '..', 'samples', 'sample-diagrams-and-callouts.md');
   const content = fs.readFileSync(filePath, 'utf8');
 
-  dom.window.editorAPI.setMarkdown(content, 'pr1_feedback_resolution_plan.md', 'file:///');
+  dom.window.editorAPI.setMarkdown(content, 'sample-diagrams-and-callouts.md', 'file:///');
 
-  const mermaidBlock = dom.window.document.querySelector('.mermaid-block');
-  assert.ok(mermaidBlock, 'Mermaid block should be present in pr1 plan');
+  const mermaidBlocks = dom.window.document.querySelectorAll('.mermaid-block');
+  assert.ok(mermaidBlocks.length >= 2, 'Mermaid blocks should be present in showcase document');
 
   const callouts = dom.window.document.querySelectorAll('blockquote.callout');
-  assert.ok(callouts.length >= 2, 'Should have at least 2 callouts (IMPORTANT, NOTE)');
+  assert.ok(callouts.length >= 5, 'Should have all 5 alert callouts');
 
   // Simulate editing
   dom.window.document.querySelector('#editor').dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   const saved = dom.window.editorAPI.getMarkdown();
 
-  // Verify mermaid flowchart and callouts are preserved
+  // Verify mermaid flowchart, sequence diagram, and callouts are preserved
   assert.match(saved, /```mermaid[\s\S]*?flowchart TD[\s\S]*?```/);
+  assert.match(saved, /```mermaid[\s\S]*?sequenceDiagram[\s\S]*?```/);
   assert.match(saved, /> \[!IMPORTANT\]/);
   assert.match(saved, /> \[!NOTE\]/);
+  assert.match(saved, /> \[!TIP\]/);
+  assert.match(saved, /> \[!WARNING\]/);
+  assert.match(saved, /> \[!CAUTION\]/);
+  assert.match(saved, /==critical requirement==/);
 
   dom.window.close();
 });
