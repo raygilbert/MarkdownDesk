@@ -52,7 +52,9 @@ npm ci
 npm run dmg
 ```
 
-The output is in `dist/`. Open the `.dmg` and drag **MarkdownDesk** to **Applications**. This local disk image is unsigned and is intended for testing on the Mac where it was built. Its filename includes the CPU architecture; the current build produces an Apple silicon image on an Apple silicon Mac.
+The output is in `dist/`. Open the `.dmg` and drag **MarkdownDesk** to **Applications**. This disk image is unsigned and intended for testing. Its filename includes the CPU architecture; the current build produces an Apple silicon image on an Apple silicon Mac.
+
+GitHub Actions also builds this unsigned installer on every push and pull request. Open a successful **macOS installer** run in the repository's **Actions** tab and download the **MarkdownDesk-macos-unsigned** artifact. Extract the downloaded ZIP to get the `.dmg`. The workflow builds and tests the app, verifies the disk image, and retains the artifact for 14 days. Downloaded unsigned builds may need manual approval from macOS before opening; they are not public releases.
 
 For a public download, sign and notarize the app and disk image with an Apple **Developer ID Application** certificate. Store notarization credentials in your Keychain with `xcrun notarytool store-credentials`, then run:
 
