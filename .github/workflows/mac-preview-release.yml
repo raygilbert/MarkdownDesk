@@ -1,0 +1,57 @@
+name: macOS preview release
+
+on:
+  push:
+    tags:
+      - 'v*-preview.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check preview tag
+        shell: bash
+        run: |
+          git fetch origin main
+          tag_commit=$(git rev-parse "${GITHUB_REF}^{commit}")
+          git merge-base --is-ancestor "$tag_commit" origin/main || {
+            echo 'Preview tags must point to a commit on main.' >&2
+            exit 1
+          }
+          version=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Info.plist)
+          prefix="v${version}-preview."
+          number="${GITHUB_REF_NAME#"$prefix"}"
+          if [[ "$GITHUB_REF_NAME" != "$prefix"* || ! "$number" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Expected a tag like ${prefix}1 for this app version." >&2
+            exit 1
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run dmg
+      - name: Name release asset
+        shell: bash
+        run: |
+          shopt -s nullglob
+          dmgs=(dist/*-local-unsigned.dmg)
+          if [[ ${#dmgs[@]} -ne 1 ]]; then
+            echo 'Expected exactly one unsigned DMG.' >&2
+            exit 1
+          fi
+          mv "${dmgs[0]}" "${dmgs[0]%-local-unsigned.dmg}-unsigned.dmg"
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*-unsigned.dmg \
+            --verify-tag --prerelease --latest=false \
+            --title "MarkdownDesk $GITHUB_REF_NAME" \
+            --notes-file .github/preview-release-notes.md
