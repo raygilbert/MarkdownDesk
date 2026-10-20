@@ -4,6 +4,16 @@ An open-source, Mac-first Markdown editor with a single rich-text page, a Markdo
 
 This is an early prototype.
 
+## Download the macOS test installer
+
+The [macOS installer GitHub Action](https://github.com/raygilbert/MarkdownDesk/actions/workflows/mac-build.yml) automatically builds an **unsigned Apple silicon `.dmg`** on every push and pull request. To download one:
+
+1. Open the workflow link and choose a successful run. The run page shows which branch and commit produced it.
+2. Under **Artifacts**, download **MarkdownDesk-macos-unsigned**. Sign in to GitHub if prompted.
+3. Extract the downloaded ZIP, open the `.dmg`, and drag **MarkdownDesk** to **Applications**.
+
+These are test builds, not signed public releases. GitHub keeps each artifact for 14 days; use a newer successful run if an older download has expired.
+
 ## Run on macOS
 
 Requirements: macOS 13 or later, Apple Command Line Tools (or Xcode), Node.js 20 or later, and npm. The app itself needs no network connection or Node.js after it has been built.
@@ -54,7 +64,7 @@ npm run dmg
 
 The output is in `dist/`. Open the `.dmg` and drag **MarkdownDesk** to **Applications**. This disk image is unsigned and intended for testing. Its filename includes the CPU architecture; the current build produces an Apple silicon image on an Apple silicon Mac.
 
-GitHub Actions also builds this unsigned installer on every push and pull request. Open a successful **macOS installer** run in the repository's **Actions** tab and download the **MarkdownDesk-macos-unsigned** artifact. Extract the downloaded ZIP to get the `.dmg`. The workflow builds and tests the app, verifies the disk image, and retains the artifact for 14 days. Downloaded unsigned builds may need manual approval from macOS before opening; they are not public releases.
+The automatic CI build is available through the [download instructions above](#download-the-macos-test-installer). The workflow builds and tests the app before uploading the verified disk image. Downloaded unsigned builds may need manual approval from macOS before opening.
 
 For a public download, sign and notarize the app and disk image with an Apple **Developer ID Application** certificate. Store notarization credentials in your Keychain with `xcrun notarytool store-credentials`, then run:
 
