@@ -4,15 +4,13 @@ An open-source, Mac-first Markdown editor with a single rich-text page, a Markdo
 
 This is an early prototype.
 
-## Download the macOS test installer
+## Download the macOS preview
 
-The [macOS installer GitHub Action](https://github.com/raygilbert/MarkdownDesk/actions/workflows/mac-build.yml) automatically builds an **unsigned Apple silicon `.dmg`** on every push and pull request. To download one:
+Get the newest **unsigned Apple silicon `.dmg`** from [GitHub Releases](https://github.com/raygilbert/MarkdownDesk/releases). Open the latest **Preview** release and download the `.dmg` under **Assets**. Open the disk image and drag **MarkdownDesk** to **Applications**.
 
-1. Open the workflow link and choose a successful run. The run page shows which branch and commit produced it.
-2. Under **Artifacts**, download **MarkdownDesk-macos-unsigned**. Sign in to GitHub if prompted.
-3. Extract the downloaded ZIP, open the `.dmg`, and drag **MarkdownDesk** to **Applications**.
+Preview releases are for testing. They are not signed or notarized with an Apple Developer ID, so macOS may require manual approval before opening the app. A release workflow builds and verifies each preview when a maintainer pushes a matching `v0.1.0-preview.N` tag on `main`.
 
-These are test builds, not signed public releases. GitHub keeps each artifact for 14 days; use a newer successful run if an older download has expired.
+For a build from an individual commit, the [macOS installer GitHub Action](https://github.com/raygilbert/MarkdownDesk/actions/workflows/mac-build.yml) still uploads a **MarkdownDesk-macos-unsigned** artifact on every push and pull request. These Actions artifacts are ZIP downloads retained for 14 days.
 
 ## Run on macOS
 
@@ -64,7 +62,7 @@ npm run dmg
 
 The output is in `dist/`. Open the `.dmg` and drag **MarkdownDesk** to **Applications**. This disk image is unsigned and intended for testing. Its filename includes the CPU architecture; the current build produces an Apple silicon image on an Apple silicon Mac.
 
-The automatic CI build is available through the [download instructions above](#download-the-macos-test-installer). The workflow builds and tests the app before uploading the verified disk image. Downloaded unsigned builds may need manual approval from macOS before opening.
+The automatic CI build is available through the [Actions link above](#download-the-macos-preview). The workflow builds and tests the app before uploading the verified disk image.
 
 For a public download, sign and notarize the app and disk image with an Apple **Developer ID Application** certificate. Store notarization credentials in your Keychain with `xcrun notarytool store-credentials`, then run:
 
@@ -74,7 +72,7 @@ export MARKDOWNDESK_NOTARY_PROFILE="MarkdownDesk"
 ./scripts/package-dmg.sh release
 ```
 
-The release script builds and tests a separate app copy, signs it with hardened runtime, creates the disk image, waits for Apple notarization, staples the ticket, and validates it. Keep signing credentials out of the repository. Publish only the resulting signed image as a GitHub Release asset. See Apple's [distribution](https://developer.apple.com/documentation/technologyoverviews/distribution) and [notarization](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution) guidance.
+The release script builds and tests a separate app copy, signs it with hardened runtime, creates the disk image, waits for Apple notarization, staples the ticket, and validates it. Keep signing credentials out of the repository. Publish the resulting signed image as a normal GitHub Release; keep unsigned builds labeled as previews. See Apple's [distribution](https://developer.apple.com/documentation/technologyoverviews/distribution) and [notarization](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution) guidance.
 
 ## Current scope
 
