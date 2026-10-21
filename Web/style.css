@@ -85,6 +85,65 @@ button { cursor: pointer; }
 #editor li { padding-left: .2em; }
 #editor li + li { margin-top: .2em; }
 #editor blockquote { margin: 1.5em 0; padding: .1em 0 .1em 1.15em; border-left: 3px solid var(--accent); color: #5d625a; }
+#editor blockquote.callout {
+  margin: 1.5em 0;
+  padding: 0.75em 1.1em 0.75em 1.15em;
+  border-left: 4px solid var(--accent);
+  border-radius: 4px;
+  background: #fbfbf9;
+  color: var(--ink);
+}
+#editor blockquote.callout-note { border-left-color: #0969da; background: #f3f8fd; }
+#editor blockquote.callout-tip { border-left-color: #1a7f37; background: #f2f9f3; }
+#editor blockquote.callout-important { border-left-color: #8250df; background: #f7f3fd; }
+#editor blockquote.callout-warning { border-left-color: #9a6700; background: #fdfaf2; }
+#editor blockquote.callout-caution { border-left-color: #cf222e; background: #fdf3f4; }
+.callout-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: "Avenir Next", Avenir, system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.45em;
+  user-select: none;
+}
+.callout-note .callout-header { color: #0969da; }
+.callout-tip .callout-header { color: #1a7f37; }
+.callout-important .callout-header { color: #8250df; }
+.callout-warning .callout-header { color: #9a6700; }
+.callout-caution .callout-header { color: #cf222e; }
+.callout-icon { font-size: 14px; }
+#editor mark {
+  background-color: #fff1a8;
+  color: inherit;
+  padding: 0.1em 0.25em;
+  border-radius: 2px;
+}
+.mermaid-block {
+  margin: 1.6em 0;
+  padding: 1.2em;
+  background: #fbfbf8;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  text-align: center;
+  user-select: none;
+}
+.mermaid-block svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+.mermaid-block p {
+  margin: 0;
+  line-height: 1.4;
+  font-family: inherit;
+}
+.mermaid-block foreignObject {
+  overflow: visible;
+}
 #editor pre { overflow: auto; padding: 1.1em 1.3em; border-radius: 3px; background: #f0f0e9; font: 14px/1.55 ui-monospace, "SFMono-Regular", "Menlo", "JetBrains Mono", "Fira Code", "Liberation Mono", "DejaVu Sans Mono", monospace; }
 #editor code { background: #f0f0e9; border-radius: 2px; padding: .1em .25em; font: .83em ui-monospace, "SFMono-Regular", "Menlo", "JetBrains Mono", "Fira Code", "Liberation Mono", "DejaVu Sans Mono", monospace; }
 #editor pre code { background: none; padding: 0; }

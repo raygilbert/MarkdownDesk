@@ -1,4 +1,4 @@
-/* global marked, DOMPurify, TurndownService, turndownPluginGfm, webkit */
+/* global marked, DOMPurify, TurndownService, turndownPluginGfm, mermaid, webkit */
 (() => {
   'use strict';
   const editor = document.getElementById('editor');
@@ -10,6 +10,54 @@
   const filename = document.getElementById('filename');
   const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' });
   turndown.use(turndownPluginGfm.gfm);
+
+  turndown.addRule('mermaid', {
+    filter: (node) => node.nodeName === 'DIV' && node.classList?.contains('mermaid-block'),
+    replacement: (_, node) => {
+      const raw = decodeURIComponent(node.getAttribute('data-raw-mermaid') || '');
+      return '\n\n```mermaid\n' + raw.trim() + '\n```\n\n';
+    }
+  });
+
+  turndown.addRule('calloutHeader', {
+    filter: (node) => node.classList?.contains('callout-header'),
+    replacement: () => ''
+  });
+
+  turndown.addRule('callout', {
+    filter: (node) => node.nodeName === 'BLOCKQUOTE' && node.hasAttribute('data-callout'),
+    replacement: (content, node) => {
+      const type = node.getAttribute('data-callout') || 'NOTE';
+      let clean = content.trim();
+      if (!clean) return `\n\n> [!${type}]\n\n`;
+      clean = clean.replace(/^/gm, '> ');
+      return `\n\n> [!${type}]\n${clean}\n\n`;
+    }
+  });
+
+  turndown.addRule('highlight', {
+    filter: 'mark',
+    replacement: (content) => `==${content}==`
+  });
+
+  if (typeof mermaid !== 'undefined') {
+    try {
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'neutral',
+        securityLevel: 'strict'
+      });
+    } catch (_) {}
+  }
+
+  const CALLOUT_ICONS = {
+    NOTE: 'ℹ️',
+    TIP: '💡',
+    IMPORTANT: '❗',
+    WARNING: '⚠️',
+    CAUTION: '🛑'
+  };
+
   let initialMarkdown = '';
   let frontMatter = '';
   let changed = false;
@@ -27,6 +75,25 @@
 
   if (typeof marked !== 'undefined' && marked.use) {
     marked.use({
+      extensions: [{
+        name: 'highlight',
+        level: 'inline',
+        start(src) { return src.indexOf('=='); },
+        tokenizer(src) {
+          const match = /^==([^=\n]+)==/.exec(src);
+          if (match) {
+            return {
+              type: 'highlight',
+              raw: match[0],
+              text: match[1],
+              tokens: this.lexer.inlineTokens(match[1])
+            };
+          }
+        },
+        renderer(token) {
+          return `<mark>${this.parser.parseInline(token.tokens)}</mark>`;
+        }
+      }],
       renderer: {
         heading({ tokens, depth }) {
           const text = this.parser.parseInline(tokens);
@@ -40,6 +107,48 @@
             }
           }
           return `<h${depth}${slug ? ` id="${slug}"` : ''}>${text}</h${depth}>\n`;
+        },
+        code({ text, lang, escaped }) {
+          const l = (lang || '').match(/^\S*/)?.[0] || '';
+          if (l === 'mermaid') {
+            const raw = text || '';
+            const encoded = encodeURIComponent(raw);
+            const esc = (escaped ? raw : raw
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#39;'));
+            return `<div class="mermaid-block" contenteditable="false" data-raw-mermaid="${encoded}"><div class="mermaid-preview"><pre class="language-mermaid"><code>${esc}</code></pre></div></div>\n`;
+          }
+          const formatted = (escaped ? text : (text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')) + '\n';
+          if (!l) {
+            return `<pre><code>${formatted}</code></pre>\n`;
+          }
+          return `<pre><code class="language-${l}">${formatted}</code></pre>\n`;
+        },
+        blockquote({ tokens }) {
+          if (tokens && tokens.length > 0 && tokens[0].type === 'paragraph') {
+            const firstPara = tokens[0];
+            if (firstPara.tokens && firstPara.tokens.length > 0 && firstPara.tokens[0].type === 'text') {
+              const match = firstPara.tokens[0].text.match(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\r?\n)?/i);
+              if (match) {
+                const type = match[1].toUpperCase();
+                const matchedLen = match[0].length;
+                firstPara.tokens[0].text = firstPara.tokens[0].text.slice(matchedLen);
+                firstPara.tokens[0].raw = firstPara.tokens[0].raw.slice(matchedLen);
+                if (!firstPara.tokens[0].text && firstPara.tokens.length === 1) {
+                  tokens.shift();
+                } else if (!firstPara.tokens[0].text && firstPara.tokens.length > 1) {
+                  firstPara.tokens.shift();
+                }
+                const body = this.parser.parse(tokens);
+                const icon = CALLOUT_ICONS[type] || 'ℹ️';
+                return `<blockquote class="callout callout-${type.toLowerCase()}" data-callout="${type}"><div class="callout-header" contenteditable="false"><span class="callout-icon">${icon}</span><span class="callout-title">${type}</span></div>${body}</blockquote>\n`;
+              }
+            }
+          }
+          return `<blockquote>\n${this.parser.parse(tokens)}</blockquote>\n`;
         }
       }
     });
@@ -50,17 +159,43 @@
     return match ? [match[1], text.slice(match[1].length)] : ['', text];
   }
 
+  let mermaidRenderSeq = 0;
+  async function renderMermaidBlocks() {
+    if (typeof mermaid === 'undefined') return;
+    const blocks = editor.querySelectorAll('.mermaid-block');
+    for (const block of blocks) {
+      const raw = decodeURIComponent(block.getAttribute('data-raw-mermaid') || '');
+      if (!raw) continue;
+      const preview = block.querySelector('.mermaid-preview');
+      if (!preview) continue;
+      const id = `mermaid-svg-${Date.now()}-${++mermaidRenderSeq}`;
+      try {
+        const { svg } = await mermaid.render(id, raw);
+        if (preview && block.isConnected) {
+          // Mermaid with strict security produces safe SVGs with foreignObject for flowchart node labels.
+          // Neutralize any script tags to ensure complete safety before inserting into preview.
+          const cleanSvg = svg.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+          preview.innerHTML = cleanSvg;
+        }
+      } catch (err) {
+        // Keep raw code in pre/code block on error
+      }
+    }
+  }
+
   function render(text) {
     const [front, body] = splitFrontMatter(text);
     frontMatter = front;
     headingCounts = {};
     const html = marked.parse(body, { gfm: true, breaks: false });
     editor.innerHTML = DOMPurify.sanitize(html, {
-      USE_PROFILES: { html: true },
-      ADD_ATTR: ['target', 'id'],
-      FORBID_TAGS: ['style', 'iframe', 'form', 'script']
+      USE_PROFILES: { html: true, svg: true, svgFilters: true },
+      ADD_TAGS: ['mark', 'use'],
+      ADD_ATTR: ['target', 'id', 'data-raw-mermaid', 'data-callout', 'contenteditable'],
+      FORBID_TAGS: ['iframe', 'form', 'script']
     });
     updateWordCount();
+    renderMermaidBlocks();
   }
 
   function markdown() {
@@ -467,6 +602,21 @@
         h1, h2, h3 { font-family: Helvetica, sans-serif; color: #282c29; }
         h1 { font-size: 25pt; } h2 { font-size: 19pt; } h3 { font-size: 15pt; }
         p, li { line-height: 1.5; } blockquote { color: #5d625a; border-left: 3px solid #bc593d; padding-left: 12px; }
+        blockquote.callout { border-radius: 4px; padding: 10px 14px; margin: 16px 0; }
+        blockquote.callout-note { border-left-color: #0969da; background: #f3f8fd; }
+        blockquote.callout-tip { border-left-color: #1a7f37; background: #f2f9f3; }
+        blockquote.callout-important { border-left-color: #8250df; background: #f7f3fd; }
+        blockquote.callout-warning { border-left-color: #9a6700; background: #fdfaf2; }
+        blockquote.callout-caution { border-left-color: #cf222e; background: #fdf3f4; }
+        .callout-header { font-weight: bold; font-size: 10pt; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+        .callout-note .callout-header { color: #0969da; }
+        .callout-tip .callout-header { color: #1a7f37; }
+        .callout-important .callout-header { color: #8250df; }
+        .callout-warning .callout-header { color: #9a6700; }
+        .callout-caution .callout-header { color: #cf222e; }
+        mark { background-color: #fff1a8; padding: 1px 3px; }
+        .mermaid-block { margin: 18px 0; text-align: center; }
+        .mermaid-block svg { max-width: 100%; height: auto; }
         pre, code { font-family: Menlo, monospace; font-size: 10pt; }
         pre { background: #f0f0e9; padding: 10px; }
         table { border-collapse: collapse; width: 100%; } th, td { border-bottom: 1px solid #d9d7ce; padding: 6px; }

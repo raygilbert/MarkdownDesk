@@ -10,6 +10,7 @@ function prepareVendor(rootDir = path.join(__dirname, '..')) {
     ['node_modules/dompurify/dist/purify.min.js', 'purify.js'],
     ['node_modules/turndown/dist/turndown.js', 'turndown.js'],
     ['node_modules/turndown-plugin-gfm/dist/turndown-plugin-gfm.js', 'turndown-gfm.js'],
+    ['node_modules/mermaid/dist/mermaid.min.js', 'mermaid.min.js'],
   ];
 
   for (const [src, dest] of copies) {

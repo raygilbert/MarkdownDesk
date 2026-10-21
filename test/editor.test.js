@@ -17,6 +17,10 @@ async function editorWindow(onChanged = () => {}, onCommand = () => {}, onOpenLi
     resources: 'usable',
     runScripts: 'dangerously',
     beforeParse(window) {
+      if (window.SVGElement) {
+        window.SVGElement.prototype.getBBox = () => ({ x: 0, y: 0, width: 100, height: 100 });
+        window.SVGElement.prototype.getBoundingClientRect = () => ({ x: 0, y: 0, width: 100, height: 100, top: 0, left: 0, bottom: 100, right: 100 });
+      }
       window.webkit = { messageHandlers: {
         ready: { postMessage() {} },
         changed: { postMessage: onChanged },
@@ -164,3 +168,100 @@ test('source mode allows following links with modifier-click', async () => {
 
   dom.window.close();
 });
+
+test('renders Mermaid code block as atomic non-editable diagram and preserves it on rich edits', async () => {
+  const dom = await editorWindow();
+  const rawMermaid = '```mermaid\nflowchart TD\n    A[Start] --> B[End]\n```';
+  const md = `# Diagrams\n\n${rawMermaid}\n\nSome trailing text.\n`;
+  dom.window.editorAPI.setMarkdown(md, 'Diagrams.md', 'file:///');
+
+  const mermaidBlock = dom.window.document.querySelector('.mermaid-block');
+  assert.ok(mermaidBlock, 'Mermaid block element should exist');
+  assert.equal(mermaidBlock.getAttribute('contenteditable'), 'false');
+  assert.ok(mermaidBlock.hasAttribute('data-raw-mermaid'));
+
+  // Wait for mermaid async render to complete
+  await new Promise((r) => setTimeout(r, 100));
+  const preview = mermaidBlock.querySelector('.mermaid-preview');
+  assert.ok(preview.innerHTML.includes('Start') && preview.innerHTML.includes('End'), 'Mermaid preview should include node label text');
+
+  // Simulate an edit in normal rich text
+  const p = dom.window.document.createElement('p');
+  p.textContent = 'Appended paragraph.';
+  dom.window.document.querySelector('#editor').appendChild(p);
+  dom.window.document.querySelector('#editor').dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+
+  const saved = dom.window.editorAPI.getMarkdown();
+  assert.match(saved, /```mermaid\nflowchart TD\n\s+A\[Start\] --> B\[End\]\n```/);
+  assert.match(saved, /Appended paragraph\./);
+  dom.window.close();
+});
+
+test('renders GitHub callouts with styled badges and preserves them on rich edits', async () => {
+  const dom = await editorWindow();
+  const md = `> [!IMPORTANT]\n> This is an important alert.\n\n> [!NOTE]\n> This is a helpful note.\n`;
+  dom.window.editorAPI.setMarkdown(md, 'Callouts.md', 'file:///');
+
+  const importantCallout = dom.window.document.querySelector('blockquote.callout-important');
+  assert.ok(importantCallout, 'Important callout element should exist');
+  assert.equal(importantCallout.getAttribute('data-callout'), 'IMPORTANT');
+  assert.ok(importantCallout.querySelector('.callout-header'));
+
+  const noteCallout = dom.window.document.querySelector('blockquote.callout-note');
+  assert.ok(noteCallout, 'Note callout element should exist');
+  assert.equal(noteCallout.getAttribute('data-callout'), 'NOTE');
+
+  // Simulate edit
+  dom.window.document.querySelector('#editor').dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  const saved = dom.window.editorAPI.getMarkdown();
+  assert.match(saved, /> \[!IMPORTANT\]\n> This is an important alert\./);
+  assert.match(saved, /> \[!NOTE\]\n> This is a helpful note\./);
+  dom.window.close();
+});
+
+test('renders ==highlight== as mark tag and losslessly roundtrips', async () => {
+  const dom = await editorWindow();
+  const md = `Here is ==highlighted text== in a sentence.\n`;
+  dom.window.editorAPI.setMarkdown(md, 'Highlight.md', 'file:///');
+
+  const mark = dom.window.document.querySelector('#editor mark');
+  assert.ok(mark, 'Mark element should exist');
+  assert.equal(mark.textContent, 'highlighted text');
+
+  // Trigger input
+  dom.window.document.querySelector('#editor').dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  const saved = dom.window.editorAPI.getMarkdown();
+  assert.match(saved, /==highlighted text==/);
+  dom.window.close();
+});
+
+test('renders sample-diagrams-and-callouts.md with mermaid diagrams and callouts intact', async () => {
+  const dom = await editorWindow();
+  const filePath = path.join(__dirname, '..', 'samples', 'sample-diagrams-and-callouts.md');
+  const content = fs.readFileSync(filePath, 'utf8');
+
+  dom.window.editorAPI.setMarkdown(content, 'sample-diagrams-and-callouts.md', 'file:///');
+
+  const mermaidBlocks = dom.window.document.querySelectorAll('.mermaid-block');
+  assert.ok(mermaidBlocks.length >= 2, 'Mermaid blocks should be present in showcase document');
+
+  const callouts = dom.window.document.querySelectorAll('blockquote.callout');
+  assert.ok(callouts.length >= 5, 'Should have all 5 alert callouts');
+
+  // Simulate editing
+  dom.window.document.querySelector('#editor').dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  const saved = dom.window.editorAPI.getMarkdown();
+
+  // Verify mermaid flowchart, sequence diagram, and callouts are preserved
+  assert.match(saved, /```mermaid[\s\S]*?flowchart TD[\s\S]*?```/);
+  assert.match(saved, /```mermaid[\s\S]*?sequenceDiagram[\s\S]*?```/);
+  assert.match(saved, /> \[!IMPORTANT\]/);
+  assert.match(saved, /> \[!NOTE\]/);
+  assert.match(saved, /> \[!TIP\]/);
+  assert.match(saved, /> \[!WARNING\]/);
+  assert.match(saved, /> \[!CAUTION\]/);
+  assert.match(saved, /==critical requirement==/);
+
+  dom.window.close();
+});
+
