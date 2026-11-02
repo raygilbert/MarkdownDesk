@@ -97,3 +97,7 @@ npm test
 The native shell is written in Swift/AppKit and uses WebKit. Browser-side Markdown conversion uses [Marked](https://marked.js.org/), [DOMPurify](https://github.com/cure53/DOMPurify), [Turndown](https://github.com/mixmark-io/turndown), and [Turndown GFM](https://github.com/mixmark-io/turndown/tree/master/packages/turndown-plugin-gfm). Their license files are bundled in `Contents/Resources/Licenses`.
 
 Contributions are welcome. Please open an issue before starting a large feature; the document model and lossless editing approach are still evolving.
+
+## Support the project
+
+MarkdownDesk is free and open source. If you find it useful and want to support its development, you can [buy me a coffee](https://buymeacoffee.com/raymondgilbert).
