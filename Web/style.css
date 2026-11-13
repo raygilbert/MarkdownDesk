@@ -27,12 +27,12 @@ button { cursor: pointer; }
   position: relative; flex: none; background: #f7f6f0;
 }
 .brand-mark::before {
-  content: ""; position: absolute; width: 12px; height: 12px; border-radius: 50%;
-  background: var(--accent); left: 5px; top: 5px;
+  content: ""; position: absolute; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--accent); left: 5px; top: 4px;
 }
 .brand-mark::after {
   content: ""; position: absolute; width: 12px; height: 2px;
-  background: var(--ink); right: 3px; bottom: 7px;
+  background: var(--ink); right: 3px; bottom: 8px; box-shadow: 0 4px 0 var(--ink);
 }
 .identity-copy { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
 .brand-name { font-size: 9px; line-height: 1.25; font-weight: 700; letter-spacing: .16em; color: var(--accent); }
@@ -59,6 +59,11 @@ button { cursor: pointer; }
   border-radius: 4px; padding: 0 10px; font-size: 12px; font-weight: 600;
 }
 .tool-button:hover, .mode-button:hover { background: #e9e8e0; }
+.tool-button:focus-visible, .mode-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.icon-button { display: inline-flex; align-items: center; justify-content: center; width: 34px; padding: 0; }
+.icon-button svg { width: 20px; height: 20px; flex: none; overflow: visible; }
+.icon-button svg path { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.icon-button svg circle { fill: currentColor; }
 .type-button { width: 32px; padding: 0; font-family: Georgia, serif; font-size: 17px; }
 .type-button em { font-weight: 400; }
 .toolbar-spacer { flex: 1; }
@@ -139,7 +144,6 @@ body.source-mode #mode { color: #fffefa; background: var(--accent); border-color
 #status { height: 31px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 29px; background: #f7f6f0; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; font-weight: 600; letter-spacing: .1em; }
 #wordcount { letter-spacing: .02em; font-weight: 500; font-size: 11px; }
 @media (max-width: 850px) {
-  .block-group .tool-button { padding: 0 7px; }
   .mode-glyph, .shortcut { display: none; }
   .paper-header { padding-left: 50px; padding-right: 50px; }
   #editor, #source { padding-left: 50px; padding-right: 50px; }

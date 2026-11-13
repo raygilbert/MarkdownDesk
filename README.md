@@ -22,6 +22,15 @@ npm run build
 open build/MarkdownDesk.app
 ```
 
+For a persistent Dock shortcut, install the built app outside a synced project folder before pinning it:
+
+```sh
+mkdir -p "$HOME/Applications"
+ditto --noextattr build/MarkdownDesk.app "$HOME/Applications/MarkdownDesk.app"
+```
+
+Pin the copy in `~/Applications`, and copy it again after rebuilding. A Dock shortcut to an app inside a Dropbox synced build folder may show a blank icon after the app closes.
+
 Create a blank document with **New** or **⌘N**, write your notes, then choose **Save** or **⌘S** to name the Markdown file and choose its folder. Open an existing file through **File → Open** or from the Terminal:
 
 ```sh
