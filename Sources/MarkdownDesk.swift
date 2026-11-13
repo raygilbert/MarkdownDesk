@@ -11,7 +11,10 @@ final class EditorController: NSObject, NSApplicationDelegate, NSWindowDelegate,
     private var dirty = false { didSet { window?.isDocumentEdited = dirty } }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.applicationIconImage = makeAppIcon()
+        if let iconURL = Bundle.main.url(forResource: "MarkdownDesk", withExtension: "icns"),
+           let icon = NSImage(contentsOf: iconURL) {
+            NSApp.applicationIconImage = icon
+        }
         makeMenu()
 
         let content = WKUserContentController()
@@ -286,32 +289,6 @@ final class EditorController: NSObject, NSApplicationDelegate, NSWindowDelegate,
         alert.alertStyle = .warning
         alert.messageText = message
         alert.runModal()
-    }
-
-    private func makeAppIcon() -> NSImage {
-        NSImage(size: NSSize(width: 512, height: 512), flipped: false) { _ in
-            NSColor(calibratedRed: 0.97, green: 0.965, blue: 0.94, alpha: 1).setFill()
-            NSBezierPath(roundedRect: NSRect(x: 16, y: 16, width: 480, height: 480),
-                         xRadius: 66, yRadius: 66).fill()
-
-            let frame = NSBezierPath(roundedRect: NSRect(x: 83, y: 84, width: 346, height: 346),
-                                     xRadius: 9, yRadius: 9)
-            frame.lineWidth = 12
-            NSColor(calibratedRed: 0.16, green: 0.18, blue: 0.17, alpha: 1).setStroke()
-            frame.stroke()
-
-            NSColor(calibratedRed: 0.74, green: 0.35, blue: 0.24, alpha: 1).setFill()
-            NSBezierPath(ovalIn: NSRect(x: 130, y: 249, width: 149, height: 149)).fill()
-
-            let line = NSBezierPath()
-            line.move(to: NSPoint(x: 242, y: 178))
-            line.line(to: NSPoint(x: 388, y: 178))
-            line.lineWidth = 17
-            line.lineCapStyle = .square
-            NSColor(calibratedRed: 0.16, green: 0.18, blue: 0.17, alpha: 1).setStroke()
-            line.stroke()
-            return true
-        }
     }
 
     private func makeMenu() {
