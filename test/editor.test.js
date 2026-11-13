@@ -48,6 +48,33 @@ test('editorAPI.save invokes the native Save command', async () => {
   dom.window.close();
 });
 
+test('brand menu opens About and Easter Egg dialogs and restores focus on close', async () => {
+  const dom = await editorWindow();
+  const { document, KeyboardEvent } = dom.window;
+  const brand = document.querySelector('#brand-mark');
+  const menu = document.querySelector('#brand-menu');
+
+  brand.click();
+  assert.equal(menu.hidden, false);
+  assert.equal(brand.getAttribute('aria-expanded'), 'true');
+  document.querySelector('#easter-egg-item').click();
+  assert.equal(menu.hidden, true);
+  assert.equal(document.querySelector('#easter-egg').hidden, false);
+  assert.equal(document.activeElement.id, 'easter-egg-close');
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert.equal(document.querySelector('#easter-egg').hidden, true);
+  assert.equal(document.activeElement, brand);
+
+  brand.click();
+  document.querySelector('#about-item').click();
+  assert.equal(document.querySelector('#about').hidden, false);
+  assert.match(document.querySelector('#about').textContent, /Created by Ray Gilbert with Codex/);
+  document.querySelector('#about-close').click();
+  assert.equal(document.querySelector('#about').hidden, true);
+  assert.equal(document.activeElement, brand);
+  dom.window.close();
+});
+
 test('opens Markdown as rich text and preserves an unedited file byte for byte', async () => {
   const dom = await editorWindow();
   const text = '---\ntitle: Example\n---\n# Hello\n\nA **bold** [link](https://example.com).\n\n| A | B |\n| - | - |\n| 1 | 2 |\n';

@@ -18,22 +18,30 @@ button { cursor: pointer; }
 #topbar {
   display: flex; align-items: center; justify-content: space-between;
   height: 72px; flex: none; padding: 0 29px;
-  background: #f7f6f0; border-bottom: 1px solid var(--line);
+  position: relative; z-index: 2; background: #f7f6f0; border-bottom: 1px solid var(--line);
 }
 .identity, .file-actions, .tool-group { display: flex; align-items: center; }
 .identity { gap: 13px; min-width: 0; }
-.brand-mark {
+.brand-control { position: relative; flex: none; }
+.brand-trigger { display: flex; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent; }
+.brand-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.brand-glyph {
   width: 29px; height: 29px; border: 1.5px solid var(--ink); border-radius: 2px;
   position: relative; flex: none; background: #f7f6f0;
 }
-.brand-mark::before {
+.brand-glyph::before {
   content: ""; position: absolute; width: 10px; height: 10px; border-radius: 50%;
   background: var(--accent); left: 5px; top: 4px;
 }
-.brand-mark::after {
+.brand-glyph::after {
   content: ""; position: absolute; width: 12px; height: 2px;
   background: var(--ink); right: 3px; bottom: 8px; box-shadow: 0 4px 0 var(--ink);
 }
+.brand-chevron { color: var(--muted); font-size: 15px; line-height: 1; transform: translateY(-2px); }
+.brand-menu[hidden] { display: none; }
+.brand-menu { position: absolute; top: calc(100% + 12px); left: -8px; z-index: 3; width: 190px; padding: 5px; border: 1px solid var(--line); border-radius: 4px; background: var(--paper); box-shadow: 0 9px 26px rgba(35, 39, 35, .15); }
+.brand-menu button { display: block; width: 100%; padding: 9px 11px; border: 0; border-radius: 2px; background: transparent; color: var(--ink); text-align: left; font-size: 12px; font-weight: 600; }
+.brand-menu button:hover, .brand-menu button:focus-visible { outline: none; background: #eeece4; }
 .identity-copy { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
 .brand-name { font-size: 9px; line-height: 1.25; font-weight: 700; letter-spacing: .16em; color: var(--accent); }
 #filename { font-size: 14px; line-height: 1.3; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 460px; }
@@ -143,6 +151,25 @@ body.source-mode #source { display: block; }
 body.source-mode #mode { color: #fffefa; background: var(--accent); border-color: var(--accent); }
 #status { height: 31px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 29px; background: #f7f6f0; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; font-weight: 600; letter-spacing: .1em; }
 #wordcount { letter-spacing: .02em; font-weight: 500; font-size: 11px; }
+.dialog-overlay[hidden] { display: none; }
+.dialog-overlay { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 24px; background: rgba(40, 44, 41, .48); }
+.dialog-card { position: relative; width: min(100%, 420px); max-height: calc(100vh - 48px); overflow: auto; padding: 38px 40px 32px; background: var(--paper); border: 1px solid var(--line); box-shadow: 0 18px 60px rgba(28, 32, 27, .2); text-align: center; animation: egg-arrive .35s ease-out both; }
+.dialog-close { position: absolute; top: 12px; right: 15px; width: 30px; height: 30px; border: 0; background: transparent; color: var(--muted); font-size: 24px; line-height: 1; }
+.dialog-close:hover, .dialog-close:focus-visible { color: var(--ink); }
+.dialog-eyebrow, .dialog-signature { font-size: 9px; font-weight: 700; letter-spacing: .17em; }
+.dialog-eyebrow { color: var(--accent); margin: 0 0 11px; }
+.dialog-signature { margin: 0; color: var(--muted); }
+.dialog-card h1 { margin: 0; font: 600 22px/1.3 "Avenir Next", Avenir, sans-serif; letter-spacing: -.025em; }
+.about-card { text-align: left; }
+.about-description { margin: 22px 0; font: 15px/1.65 "Iowan Old Style", Georgia, serif; }
+.about-credit { margin: 0 0 28px; color: #5d625a; font-size: 12px; line-height: 1.6; }
+.easter-egg-art { position: relative; width: 104px; height: 84px; margin: 5px auto 26px; overflow: hidden; }
+.easter-egg-sun { position: absolute; left: 25px; top: 12px; width: 54px; height: 54px; border-radius: 50%; background: var(--accent); animation: egg-rise 1.2s ease-out both; }
+.easter-egg-horizon { position: absolute; left: 0; right: 0; bottom: 16px; height: 1px; background: var(--ink); }
+.easter-egg-poem { margin: 24px 0 30px; font: 16px/1.8 "Iowan Old Style", Georgia, serif; color: #5d625a; }
+@keyframes egg-arrive { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes egg-rise { from { transform: translateY(22px); } to { transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .dialog-card, .easter-egg-sun { animation: none; } }
 @media (max-width: 850px) {
   .mode-glyph, .shortcut { display: none; }
   .paper-header { padding-left: 50px; padding-right: 50px; }
@@ -150,7 +177,7 @@ body.source-mode #mode { color: #fffefa; background: var(--accent); border-color
 }
 @media print {
   body, #app-shell, #workspace { display: block; height: auto; padding: 0; background: white; color: black; overflow: visible; }
-  #topbar, #toolbar, #status, .paper-header, #source { display: none !important; }
+  #topbar, #toolbar, #status, .paper-header, #source, .dialog-overlay { display: none !important; }
   #paper { display: block; width: auto; min-height: 0; margin: 0; border: 0; box-shadow: none; background: white; }
   #editor { display: block !important; min-height: 0; padding: 0; background: white; color: black; font-size: 11pt; }
   #editor pre, #editor blockquote, #editor table, #editor img { break-inside: avoid; }

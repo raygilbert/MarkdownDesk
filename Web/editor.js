@@ -8,6 +8,12 @@
   const viewLabel = document.getElementById('view-label');
   const wordcount = document.getElementById('wordcount');
   const filename = document.getElementById('filename');
+  const brandMark = document.getElementById('brand-mark');
+  const brandControl = document.querySelector('.brand-control');
+  const brandMenu = document.getElementById('brand-menu');
+  const about = document.getElementById('about');
+  const easterEgg = document.getElementById('easter-egg');
+  let activeDialog = null;
   const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' });
   turndown.use(turndownPluginGfm.gfm);
   let initialMarkdown = '';
@@ -351,6 +357,52 @@
   document.getElementById('new-file').addEventListener('click', () => postNativeMessage('command', 'new'));
   document.getElementById('open-file').addEventListener('click', () => postNativeMessage('command', 'open'));
   document.getElementById('save-file').addEventListener('click', () => postNativeMessage('command', 'save'));
+  const menuItems = [...brandMenu.querySelectorAll('[role="menuitem"]')];
+  function setMenuOpen(open) {
+    const menuHadFocus = brandMenu.contains(document.activeElement);
+    brandMenu.hidden = !open;
+    brandMark.setAttribute('aria-expanded', String(open));
+    if (!open && menuHadFocus) brandMark.focus();
+  }
+  function openDialog(dialog) {
+    setMenuOpen(false);
+    activeDialog = dialog;
+    dialog.hidden = false;
+    dialog.querySelector('.dialog-close').focus();
+  }
+  function closeDialog() {
+    if (!activeDialog) return;
+    activeDialog.hidden = true;
+    activeDialog = null;
+    brandMark.focus();
+  }
+  brandMark.addEventListener('click', () => {
+    const open = brandMenu.hidden;
+    setMenuOpen(open);
+    if (open) menuItems[0].focus();
+  });
+  brandMenu.addEventListener('keydown', (event) => {
+    const index = menuItems.indexOf(document.activeElement);
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const step = event.key === 'ArrowDown' ? 1 : -1;
+      menuItems[(index + step + menuItems.length) % menuItems.length].focus();
+    } else if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      menuItems[event.key === 'Home' ? 0 : menuItems.length - 1].focus();
+    }
+  });
+  document.getElementById('about-item').addEventListener('click', () => openDialog(about));
+  document.getElementById('easter-egg-item').addEventListener('click', () => openDialog(easterEgg));
+  for (const dialog of [about, easterEgg]) {
+    dialog.querySelector('.dialog-close').addEventListener('click', closeDialog);
+    dialog.addEventListener('click', (event) => {
+      if (event.target === dialog) closeDialog();
+    });
+  }
+  document.addEventListener('click', (event) => {
+    if (!brandControl.contains(event.target)) setMenuOpen(false);
+  });
   modeButton.addEventListener('click', switchMode);
   editor.addEventListener('input', reportChange);
   source.addEventListener('input', reportChange);
@@ -406,6 +458,20 @@
     }
   });
   document.addEventListener('keydown', (event) => {
+    if (activeDialog) {
+      if (event.key === 'Escape' || event.key === 'Tab') {
+        event.preventDefault();
+        if (event.key === 'Escape') closeDialog();
+        else activeDialog.querySelector('.dialog-close').focus();
+      }
+      return;
+    }
+    if (!brandMenu.hidden && event.key === 'Escape') {
+      event.preventDefault();
+      setMenuOpen(false);
+      brandMark.focus();
+      return;
+    }
     const isMod = isMac ? event.metaKey : event.ctrlKey;
     if (isMod && event.shiftKey && event.key.toLowerCase() === 'm') {
       event.preventDefault();
