@@ -2,7 +2,7 @@
   "name": "markdowndesk",
   "private": true,
   "version": "0.1.0",
-  "description": "Build-time dependencies for the offline macOS Markdown editor",
+  "description": "Build-time dependencies for the offline Mac-first Markdown editor (macOS and Linux)",
   "scripts": {
     "prepare-vendor": "node scripts/prepare-vendor.js",
     "build": "node scripts/build.js",
