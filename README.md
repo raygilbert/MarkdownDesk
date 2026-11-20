@@ -2,6 +2,8 @@
 
 An open-source, Mac-first Markdown editor with a single rich-text page, a Markdown source view, printing, and PDF export. Markdown files stay plain text and remain usable from the CLI.
 
+macOS is the primary platform: it has the native Swift/AppKit app, the preview downloads, and most of the testing. Linux is also supported through a [Tauri](https://tauri.app/) shell that shares the same editor. Linux users build it from source for now; see [Run on Linux](#run-on-linux).
+
 This is an early prototype.
 
 ## Download the macOS preview
@@ -41,25 +43,6 @@ Use **File → Export PDF** for a paginated PDF, or **File → Print** for the m
 
 If the local Swift compiler and selected macOS SDK are mismatched, set `MARKDOWNDESK_SDK` to an installed compatible SDK path before building. The build script automatically chooses the macOS 26 SDK for Swift 6.3 Command Line Tools when available.
 
-## Run on Linux (AppImage)
-
-Requirements: Linux (x86_64), Node.js 20 or later, npm, Rust/Cargo, and WebKitGTK (`webkit2gtk-4.1` or `webkitgtk-6.0`).
-
-```sh
-npm ci
-npm run appimage
-```
-
-The standalone AppImage is generated in:
-```
-src-tauri/target/release/bundle/appimage/MarkdownDesk_0.1.0_amd64.AppImage
-```
-
-Run it directly or pass a Markdown file from the command line:
-```sh
-./src-tauri/target/release/bundle/appimage/MarkdownDesk_0.1.0_amd64.AppImage "/path/to/note.md"
-```
-
 ## Make a Mac installer
 
 To make a disk image for your own Mac:
@@ -83,17 +66,47 @@ export MARKDOWNDESK_NOTARY_PROFILE="MarkdownDesk"
 
 The release script builds and tests a separate app copy, signs it with hardened runtime, creates the disk image, waits for Apple notarization, staples the ticket, and validates it. Keep signing credentials out of the repository. Publish the resulting signed image as a normal GitHub Release; keep unsigned builds labeled as previews. See Apple's [distribution](https://developer.apple.com/documentation/technologyoverviews/distribution) and [notarization](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution) guidance.
 
+## Run on Linux
+
+Linux support was contributed by [@mbidewell](https://github.com/mbidewell). It uses a Tauri v2 shell around the same web editor as the Mac app. There are no prebuilt Linux downloads yet, so build it from source.
+
+Requirements: Linux (x86_64), Node.js 20 or later, npm, Rust/Cargo, and WebKitGTK 4.1 (`webkit2gtk-4.1`) with the other packages in Tauri's [Linux prerequisites](https://v2.tauri.app/start/prerequisites/#linux).
+
+```sh
+npm ci
+npm run appimage
+```
+
+The standalone AppImage is generated in:
+
+```
+src-tauri/target/release/bundle/appimage/MarkdownDesk_0.1.0_amd64.AppImage
+```
+
+Run it directly or pass a Markdown file from the command line:
+
+```sh
+./src-tauri/target/release/bundle/appimage/MarkdownDesk_0.1.0_amd64.AppImage "/path/to/note.md"
+```
+
+On Linux, `npm run build` builds both an AppImage and a `.deb` package under `src-tauri/target/release/bundle/`.
+
+The Linux app has the same editor, toolbar, and File, Edit, Format, and View menus. Differences from the Mac app:
+
+- Keyboard shortcuts use **Ctrl** where the Mac uses **⌘** (for example **Ctrl+S** to save and **Ctrl+Shift+M** for source view).
+- Printing and PDF export share one command, **File → Print / Export PDF…** (**Ctrl+P**). To make a PDF, choose a print-to-file or PDF printer in the print dialog.
+
 ## Current scope
 
 - Opens and saves UTF-8 `.md`, `.markdown`, and plain-text files.
 - Rich view displays headings, emphasis, links, lists, tables, task lists, code blocks, quotes, images, and horizontal rules.
 - YAML front matter is retained during rich edits. A file saved without editing keeps its original Markdown text.
 - The source view supports exact Markdown editing, including syntax the rich view does not handle.
-- Auto-update and cross-platform releases are not included.
+- Auto-update, prebuilt Linux packages, and Windows support are not included.
 
 Rich-text editing converts the document through HTML when saving. This can normalize whitespace, Markdown syntax choices, or advanced constructs such as footnotes, math, diagrams, embedded HTML, and nested tables. For those documents, edit in source view. Keep your files under version control or backed up while using this prototype.
 
-The build and automated Markdown tests pass. Opening files from the toolbar and the CLI, saving a rich-text edit, and exporting one-page and two-page PDFs were checked in the Mac app. Print uses the same AppKit document view as PDF export.
+The build and automated Markdown tests pass. Opening files from the toolbar and the CLI, saving a rich-text edit, and exporting one-page and two-page PDFs were checked in the Mac app. Print uses the same AppKit document view as PDF export. The Linux build is tested less than the Mac app; please report Linux problems in Issues.
 
 ## Develop
 
@@ -103,7 +116,12 @@ npm run build
 npm test
 ```
 
-The native shell is written in Swift/AppKit and uses WebKit. Browser-side Markdown conversion uses [Marked](https://marked.js.org/), [DOMPurify](https://github.com/cure53/DOMPurify), [Turndown](https://github.com/mixmark-io/turndown), and [Turndown GFM](https://github.com/mixmark-io/turndown/tree/master/packages/turndown-plugin-gfm). Their license files are bundled in `Contents/Resources/Licenses`.
+There are two native shells around one shared web editor in `Web/`:
+
+- **macOS:** `Sources/MarkdownDesk.swift`, written in Swift/AppKit with WebKit. `npm run build` on a Mac runs `scripts/build.sh`.
+- **Linux:** `src-tauri/`, written in Rust with Tauri v2 and WebKitGTK. `npm run build` on Linux runs `tauri build`.
+
+Changes to the editor itself affect both platforms. The automated tests in `test/` exercise the web layer, not either native shell. Browser-side Markdown conversion uses [Marked](https://marked.js.org/), [DOMPurify](https://github.com/cure53/DOMPurify), [Turndown](https://github.com/mixmark-io/turndown), and [Turndown GFM](https://github.com/mixmark-io/turndown/tree/master/packages/turndown-plugin-gfm). In the Mac app, their license files are bundled in `Contents/Resources/Licenses`.
 
 Contributions are welcome. Please open an issue before starting a large feature; the document model and lossless editing approach are still evolving.
 
