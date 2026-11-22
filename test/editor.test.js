@@ -191,3 +191,189 @@ test('source mode allows following links with modifier-click', async () => {
 
   dom.window.close();
 });
+
+function key(dom, target, keyName, options = {}) {
+  target.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: keyName, bubbles: true, cancelable: true, ...options }));
+}
+
+function typeQuery(dom, query) {
+  const input = dom.window.document.querySelector('#find-input');
+  input.value = query;
+  input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  return input;
+}
+
+test('find counts rich-text matches across inline formatting but not across blocks', async () => {
+  let changes = 0;
+  const dom = await editorWindow(() => { changes += 1; });
+  const { document } = dom.window;
+  const text = '# Apple notes\n\nAn **app**le a day. APPLE pie.\n\nGreen\n\napple\n';
+  dom.window.editorAPI.setMarkdown(text, 'Fruit.md', 'file:///tmp/');
+
+  key(dom, document, 'f', { ctrlKey: true });
+  assert.equal(document.querySelector('#find-bar').hidden, false);
+  assert.equal(document.activeElement.id, 'find-input');
+
+  typeQuery(dom, 'apple');
+  assert.equal(document.querySelector('#find-count').textContent, '1 of 4');
+  typeQuery(dom, 'green apple');
+  assert.equal(document.querySelector('#find-count').textContent, 'No matches');
+  assert.equal(document.querySelector('#find-bar').classList.contains('no-match'), true);
+
+  // Searching never edits the document.
+  assert.equal(changes, 0);
+  assert.equal(dom.window.editorAPI.getMarkdown(), text);
+  dom.window.close();
+});
+
+test('find steps forward and back with Enter, wraps, and selects the match on close', async () => {
+  const dom = await editorWindow();
+  const { document } = dom.window;
+  dom.window.editorAPI.setMarkdown('one cat\n\ntwo cat\n\nthree cat\n', 'Cats.md', 'file:///tmp/');
+  dom.window.editorAPI.find();
+  const input = typeQuery(dom, 'cat');
+  const count = document.querySelector('#find-count');
+  assert.equal(count.textContent, '1 of 3');
+  key(dom, input, 'Enter');
+  assert.equal(count.textContent, '2 of 3');
+  key(dom, input, 'Enter');
+  key(dom, input, 'Enter');
+  assert.equal(count.textContent, '1 of 3');
+  key(dom, input, 'Enter', { shiftKey: true });
+  assert.equal(count.textContent, '3 of 3');
+  key(dom, document, 'g', { ctrlKey: true, shiftKey: true });
+  assert.equal(count.textContent, '2 of 3');
+  dom.window.editorAPI.findNext();
+  assert.equal(count.textContent, '3 of 3');
+
+  key(dom, input, 'Escape');
+  assert.equal(document.querySelector('#find-bar').hidden, true);
+  assert.equal(document.querySelector('#find-layer').childElementCount, 0);
+  const selection = dom.window.getSelection();
+  assert.equal(selection.toString(), 'cat');
+  assert.equal(selection.anchorNode.parentElement.textContent, 'three cat');
+  dom.window.close();
+});
+
+test('find opens with the selected text and updates as the document changes', async () => {
+  const dom = await editorWindow();
+  const { document } = dom.window;
+  dom.window.editorAPI.setMarkdown('Alpha beta\n\nbeta gamma\n', 'Greek.md', 'file:///tmp/');
+  const firstParagraph = document.querySelector('#editor p').firstChild;
+  const range = document.createRange();
+  range.setStart(firstParagraph, 6);
+  range.setEnd(firstParagraph, 10);
+  dom.window.getSelection().removeAllRanges();
+  dom.window.getSelection().addRange(range);
+
+  dom.window.editorAPI.find();
+  assert.equal(document.querySelector('#find-input').value, 'beta');
+  assert.equal(document.querySelector('#find-count').textContent, '1 of 2');
+
+  const editor = document.querySelector('#editor');
+  const paragraph = document.createElement('p');
+  paragraph.textContent = 'more beta';
+  editor.appendChild(paragraph);
+  editor.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.equal(document.querySelector('#find-count').textContent, '1 of 3');
+  dom.window.close();
+});
+
+test('find in source view marks matches and selects the current one on close', async () => {
+  const dom = await editorWindow();
+  const { document } = dom.window;
+  dom.window.editorAPI.setMarkdown('# Title\n\n[docs](https://docs.example.com) and docs\n', 'Docs.md', 'file:///tmp/');
+  dom.window.editorAPI.toggleSource();
+  const source = document.querySelector('#source');
+  source.setSelectionRange(0, 0);
+  dom.window.editorAPI.find();
+  const input = typeQuery(dom, 'DOCS');
+  assert.equal(document.querySelector('#find-count').textContent, '1 of 3');
+  const marks = document.querySelectorAll('#find-layer .find-mirror mark');
+  assert.deepEqual([...marks].map((m) => m.textContent), ['docs', 'docs', 'docs']);
+  assert.equal(document.querySelector('#find-layer mark.current'), marks[0]);
+
+  key(dom, input, 'Enter');
+  key(dom, input, 'Enter');
+  key(dom, input, 'Escape');
+  assert.equal(document.activeElement, source);
+  assert.equal(source.value.slice(source.selectionStart, source.selectionEnd), 'docs');
+  assert.equal(source.selectionStart, source.value.lastIndexOf('docs'));
+  dom.window.close();
+});
+
+test('links with app-specific schemes are kept and handed to the native shell', async () => {
+  const openedLinks = [];
+  const dom = await editorWindow(() => {}, () => {}, (url) => openedLinks.push(url));
+  const text = '[Mail](mailto:a@example.com) [Call](tel:+15555550100) [Code](vscode://file/tmp/a.md) [Bad](javascript:alert(1))\n';
+  dom.window.editorAPI.setMarkdown(text, 'Links.md', 'file:///tmp/');
+  const links = [...dom.window.document.querySelectorAll('#editor a')];
+  assert.deepEqual(links.map((a) => a.getAttribute('href')), ['mailto:a@example.com', 'tel:+15555550100', 'vscode://file/tmp/a.md', null]);
+  for (const link of links) {
+    link.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true }));
+  }
+  assert.deepEqual(openedLinks, ['mailto:a@example.com', 'tel:+15555550100', 'vscode://file/tmp/a.md']);
+  dom.window.close();
+});
+
+test('link dialog edits, rejects script links, and removes an existing link', async () => {
+  let changes = 0;
+  const dom = await editorWindow(() => { changes += 1; });
+  const { document } = dom.window;
+  dom.window.editorAPI.setMarkdown('See [the site](https://old.example.com) today.\n', 'Link.md', 'file:///tmp/');
+  const anchor = document.querySelector('#editor a');
+  const range = document.createRange();
+  range.setStart(anchor.firstChild, 2);
+  range.collapse(true);
+  dom.window.getSelection().removeAllRanges();
+  dom.window.getSelection().addRange(range);
+  document.dispatchEvent(new dom.window.Event('selectionchange'));
+
+  dom.window.editorAPI.format('link');
+  const dialog = document.querySelector('#link-dialog');
+  const url = document.querySelector('#link-url');
+  assert.equal(dialog.hidden, false);
+  assert.equal(document.querySelector('#link-dialog-title').textContent, 'Edit link');
+  assert.equal(url.value, 'https://old.example.com');
+
+  url.value = 'javascript:alert(1)';
+  document.querySelector('#link-form').requestSubmit();
+  assert.equal(dialog.hidden, false);
+  assert.match(document.querySelector('#link-error').textContent, /cannot be used/);
+  assert.equal(anchor.getAttribute('href'), 'https://old.example.com');
+
+  url.value = 'www.new.example.com';
+  document.querySelector('#link-form').requestSubmit();
+  assert.equal(dialog.hidden, true);
+  assert.equal(changes, 1);
+  assert.match(dom.window.editorAPI.getMarkdown(), /\[the site\]\(https:\/\/www\.new\.example\.com\)/);
+
+  dom.window.editorAPI.format('link');
+  document.querySelector('#link-remove').click();
+  assert.equal(document.querySelector('#editor a'), null);
+  assert.match(dom.window.editorAPI.getMarkdown(), /^See the site today\.\n$/);
+  dom.window.close();
+});
+
+test('hovering a rich-text link shows a modifier-click tooltip with the target', async () => {
+  const dom = await editorWindow();
+  const { document, MouseEvent, KeyboardEvent } = dom.window;
+  dom.window.editorAPI.setMarkdown('[Docs](https://docs.example.com) and [Top](#top)\n', 'Hint.md', 'file:///tmp/');
+  const [docs, top] = document.querySelectorAll('#editor a');
+
+  docs.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+  const hint = document.querySelector('#link-hint');
+  assert.equal(hint.classList.contains('visible'), true);
+  assert.equal(hint.textContent, 'Ctrl-click to open https://docs.example.com');
+
+  dom.window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Control', ctrlKey: true }));
+  assert.equal(hint.textContent, 'Click to open https://docs.example.com');
+  dom.window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Control' }));
+
+  top.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+  assert.equal(hint.textContent, 'Ctrl-click to jump to #top');
+  top.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
+  assert.equal(hint.classList.contains('visible'), false);
+  dom.window.close();
+});

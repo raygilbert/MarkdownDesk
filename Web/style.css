@@ -78,15 +78,32 @@ button { cursor: pointer; }
 .mode-button { border: 1px solid #cccac1; background: #f9f8f3; white-space: nowrap; }
 .mode-glyph { margin-left: 10px; font-size: 10px; color: var(--muted); font-weight: 400; }
 
+#find-bar[hidden] { display: none; }
+#find-bar {
+  display: flex; align-items: center; gap: 4px; height: 44px; flex: none;
+  padding: 0 29px; background: #f2f1ea; border-bottom: 1px solid var(--line);
+}
+.find-icon { width: 17px; height: 17px; flex: none; margin-right: 6px; fill: none; stroke: var(--muted); stroke-width: 1.6; stroke-linecap: round; }
+#find-input {
+  width: min(360px, 45vw); height: 29px; padding: 0 10px; border: 1px solid #c9c8bf; border-radius: 4px;
+  background: var(--paper); color: var(--ink); font: 13px "Avenir Next", Avenir, system-ui, sans-serif; outline: none;
+}
+#find-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(188, 89, 61, .18); }
+#find-bar.no-match #find-input { border-color: #b8432b; background: #fbefea; }
+#find-count { min-width: 76px; padding: 0 8px; color: var(--muted); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#find-bar .icon-button { width: 30px; height: 29px; }
+#find-close { margin-left: auto; }
+
 #workspace { flex: 1; overflow: auto; padding: 30px 26px 42px; background: var(--canvas); }
 #paper {
+  position: relative;
   width: min(100%, 790px); min-height: 100%; margin: 0 auto;
   background: var(--paper); border: 1px solid #dfded5;
   box-shadow: 0 7px 28px rgba(35, 39, 35, .07), 0 1px 3px rgba(35, 39, 35, .05);
 }
 .paper-header { display: flex; align-items: center; gap: 13px; padding: 46px 72px 0; color: #9d9b91; font-size: 9px; font-weight: 700; letter-spacing: .17em; }
 .paper-rule { height: 1px; flex: 1; background: #deddd5; }
-#editor, #source { display: block; width: 100%; min-height: 660px; padding: 35px 72px 110px; border: 0; outline: 0; background: transparent; color: var(--ink); }
+#editor, #source { position: relative; z-index: 1; display: block; width: 100%; min-height: 660px; padding: 35px 72px 110px; border: 0; outline: 0; background: transparent; color: var(--ink); }
 #editor { font: 18px/1.73 "Iowan Old Style", Georgia, "DejaVu Serif", "Noto Serif", "Liberation Serif", serif; overflow-wrap: break-word; }
 #editor:empty::before { content: "Begin writing…"; color: #aba99f; }
 #editor h1, #editor h2, #editor h3 { font-family: "Avenir Next", Avenir, system-ui, -apple-system, "Cantarell", "Ubuntu", "Segoe UI", sans-serif; line-height: 1.24; letter-spacing: -.025em; color: #252b27; break-after: avoid; }
@@ -143,9 +160,31 @@ body.mod-active #source { cursor: pointer; }
   animation: anchor-flash 1.5s ease-out;
 }
 
+#find-layer { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
+.find-hit { position: absolute; border-radius: 2px; background: rgba(240, 196, 64, .42); mix-blend-mode: multiply; }
+.find-hit.current { background: rgba(232, 128, 36, .62); box-shadow: 0 0 0 1px rgba(188, 89, 61, .7); }
+.find-mirror {
+  position: absolute; overflow: hidden; margin: 0; border: 0; color: transparent;
+  white-space: pre-wrap; overflow-wrap: break-word; word-break: normal;
+  font: 14px/1.7 ui-monospace, "SFMono-Regular", "Menlo", "JetBrains Mono", "Fira Code", "Liberation Mono", "DejaVu Sans Mono", monospace; tab-size: 2;
+}
+.hover-mirror { z-index: 3; opacity: 0; pointer-events: none; }
+.find-mirror mark { color: transparent; border-radius: 2px; background: rgba(240, 196, 64, .42); }
+.find-mirror mark.current { background: rgba(232, 128, 36, .62); box-shadow: 0 0 0 1px rgba(188, 89, 61, .7); }
+
+.dialog-card.link-card { text-align: left; }
+.link-card label { display: block; margin: 22px 0 7px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+#link-url { width: 100%; height: 36px; padding: 0 11px; border: 1px solid #c9c8bf; border-radius: 4px; background: #fffefa; color: var(--ink); font: 14px ui-monospace, "SFMono-Regular", "Menlo", monospace; outline: none; }
+#link-url:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(188, 89, 61, .18); }
+.link-help { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.link-error { min-height: 1.4em; margin: 6px 0 12px; color: #b8432b; font-size: 12px; }
+.link-actions { display: flex; justify-content: flex-end; gap: 9px; }
+.link-actions button { height: 34px; border-radius: 4px; padding: 0 15px; font-size: 12px; font-weight: 600; }
+.link-actions #link-remove[hidden] { display: none; }
+
 #editor hr { border: 0; border-top: 1px solid var(--line); margin: 2.2em 0; }
 #editor input[type=checkbox] { margin-right: .55em; accent-color: var(--accent); }
-#source { display: none; resize: none; font: 14px/1.7 ui-monospace, "SFMono-Regular", "Menlo", "JetBrains Mono", "Fira Code", "Liberation Mono", "DejaVu Sans Mono", monospace; tab-size: 2; }
+#source { display: none; resize: none; background: transparent; font: 14px/1.7 ui-monospace, "SFMono-Regular", "Menlo", "JetBrains Mono", "Fira Code", "Liberation Mono", "DejaVu Sans Mono", monospace; tab-size: 2; }
 body.source-mode #editor { display: none; }
 body.source-mode #source { display: block; }
 body.source-mode #mode { color: #fffefa; background: var(--accent); border-color: var(--accent); }
@@ -177,7 +216,7 @@ body.source-mode #mode { color: #fffefa; background: var(--accent); border-color
 }
 @media print {
   body, #app-shell, #workspace { display: block; height: auto; padding: 0; background: white; color: black; overflow: visible; }
-  #topbar, #toolbar, #status, .paper-header, #source, .dialog-overlay { display: none !important; }
+  #topbar, #toolbar, #find-bar, #find-layer, .hover-mirror, #status, .paper-header, #source, .dialog-overlay, .link-hint { display: none !important; }
   #paper { display: block; width: auto; min-height: 0; margin: 0; border: 0; box-shadow: none; background: white; }
   #editor { display: block !important; min-height: 0; padding: 0; background: white; color: black; font-size: 11pt; }
   #editor pre, #editor blockquote, #editor table, #editor img { break-inside: avoid; }

@@ -10,7 +10,7 @@ This is an early prototype.
 
 Get the newest **unsigned Apple silicon `.dmg`** from [GitHub Releases](https://github.com/raygilbert/MarkdownDesk/releases). Open the latest **Preview** release and download the `.dmg` under **Assets**. Open the disk image and drag **MarkdownDesk** to **Applications**.
 
-Preview releases are for testing. They are not signed or notarized with an Apple Developer ID, so macOS may require manual approval before opening the app. A release workflow builds and verifies each preview when a maintainer pushes a matching `v0.1.0-preview.N` tag on `main`.
+Preview releases are for testing. They are not signed or notarized with an Apple Developer ID, so macOS may require manual approval before opening the app. A release workflow builds and verifies each preview when a maintainer pushes a matching `v0.2.0-preview.N` tag on `main`.
 
 For a build from an individual commit, the [macOS installer GitHub Action](https://github.com/raygilbert/MarkdownDesk/actions/workflows/mac-build.yml) still uploads a **MarkdownDesk-macos-unsigned** artifact on every push and pull request. These Actions artifacts are ZIP downloads retained for 14 days.
 
@@ -38,6 +38,10 @@ Create a blank document with **New** or **⌘N**, write your notes, then choose 
 ```sh
 open -a "$PWD/build/MarkdownDesk.app" "/absolute/path/to/note.md"
 ```
+
+Search the document with **Edit → Find** or **⌘F**. Matches are highlighted in both rich text and source view; press **Return** or **⌘G** for the next match and **⇧⌘G** for the previous one, and **Esc** to close the find bar with the current match selected.
+
+To follow a link, **⌘-click** it (a plain click places the cursor so you can edit the link text). Web links open in your default browser, `mailto:` links in your mail app, and other schemes such as `tel:` or `vscode://` in the app registered for them. Links to other Markdown files open in MarkdownDesk; links to other local files open in their default app; `#heading` links jump within the document. Insert or edit a link with **Format → Link…** or **⌘K**.
 
 Use **File → Export PDF** for a paginated PDF, or **File → Print** for the macOS print dialog. Toggle the Markdown source view with **⌘⇧M**. The toolbar groups paragraph style, emphasis, blocks, and links; **New**, **Open**, and **Save** are always visible above it.
 
@@ -80,20 +84,21 @@ npm run appimage
 The standalone AppImage is generated in:
 
 ```
-src-tauri/target/release/bundle/appimage/MarkdownDesk_0.1.0_amd64.AppImage
+src-tauri/target/release/bundle/appimage/MarkdownDesk_0.2.0_amd64.AppImage
 ```
 
 Run it directly or pass a Markdown file from the command line:
 
 ```sh
-./src-tauri/target/release/bundle/appimage/MarkdownDesk_0.1.0_amd64.AppImage "/path/to/note.md"
+./src-tauri/target/release/bundle/appimage/MarkdownDesk_0.2.0_amd64.AppImage "/path/to/note.md"
 ```
 
 On Linux, `npm run build` builds both an AppImage and a `.deb` package under `src-tauri/target/release/bundle/`.
 
 The Linux app has the same editor, toolbar, and File, Edit, Format, and View menus. Differences from the Mac app:
 
-- Keyboard shortcuts use **Ctrl** where the Mac uses **⌘** (for example **Ctrl+S** to save and **Ctrl+Shift+M** for source view).
+- Keyboard shortcuts use **Ctrl** where the Mac uses **⌘** (for example **Ctrl+S** to save, **Ctrl+F** to find, **Ctrl+Shift+M** for source view, and **Ctrl-click** to follow a link). **F3** and **Shift+F3** also step through find matches.
+- Links open in the desktop's default app for the link type, through `xdg-open`.
 - Printing and PDF export share one command, **File → Print / Export PDF…** (**Ctrl+P**). To make a PDF, choose a print-to-file or PDF printer in the print dialog.
 
 ## Current scope

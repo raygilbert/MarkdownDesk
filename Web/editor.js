@@ -13,7 +13,20 @@
   const brandMenu = document.getElementById('brand-menu');
   const about = document.getElementById('about');
   const easterEgg = document.getElementById('easter-egg');
+  const linkDialog = document.getElementById('link-dialog');
+  const linkForm = document.getElementById('link-form');
+  const linkUrl = document.getElementById('link-url');
+  const linkError = document.getElementById('link-error');
+  const linkRemove = document.getElementById('link-remove');
+  const linkTitle = document.getElementById('link-dialog-title');
+  const paper = document.getElementById('paper');
+  const workspace = document.getElementById('workspace');
+  const findBar = document.getElementById('find-bar');
+  const findInput = document.getElementById('find-input');
+  const findCount = document.getElementById('find-count');
+  const findLayer = document.getElementById('find-layer');
   let activeDialog = null;
+  let dialogReturnFocus = null;
   const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' });
   turndown.use(turndownPluginGfm.gfm);
   let initialMarkdown = '';
@@ -29,6 +42,20 @@
       .replace(/[^\w\s-]/g, '')
       .trim()
       .replace(/\s+/g, '-');
+  }
+
+  // Links are handed to the operating system, which opens them in the default app for
+  // their scheme (browser, Mail, a custom-scheme app, or the file's default app).
+  // Script-bearing and in-page schemes are never followed.
+  const BLOCKED_LINK_SCHEME = /^(?:javascript|vbscript|data|blob|about):/i;
+  // DOMPurify keeps any link scheme except the blocked ones (it strips whitespace
+  // and control characters before testing). Images may still use data: URIs.
+  const ALLOWED_URI = /^(?!(?:javascript|vbscript|data|blob|about):)/i;
+
+  function isAllowedLink(href) {
+    // eslint-disable-next-line no-control-regex
+    const compact = String(href ?? '').replace(/[\u0000-\u0020\u007f-\u00a0\u1680\u180e\u2000-\u2029\u205f\u3000\ufeff]/g, '');
+    return compact !== '' && !BLOCKED_LINK_SCHEME.test(compact);
   }
 
   if (typeof marked !== 'undefined' && marked.use) {
@@ -64,6 +91,7 @@
     editor.innerHTML = DOMPurify.sanitize(html, {
       USE_PROFILES: { html: true },
       ADD_ATTR: ['target', 'id'],
+      ALLOWED_URI_REGEXP: ALLOWED_URI,
       FORBID_TAGS: ['style', 'iframe', 'form', 'script']
     });
     updateWordCount();
@@ -89,7 +117,9 @@
   const modKeyHint = isMac ? '⌘-click' : 'Ctrl-click';
 
   let linkHint = null;
-  let currentHoveredLink = null;
+  // The hint describes one link: an <a> in rich text, or a Markdown link under the
+  // pointer in source view. `element` is set only for rich text.
+  let currentHint = null;
 
   function ensureLinkHint() {
     if (!linkHint && document.body) {
@@ -103,19 +133,15 @@
   }
 
   function updateHintText() {
-    if (!currentHoveredLink || !linkHint?.classList.contains('visible')) return;
-    const rawHref = currentHoveredLink.getAttribute('href') || '';
-    const isAnchor = rawHref.startsWith('#');
-    const isModDown = document.body.classList.contains('mod-active');
-    const action = isAnchor ? 'jump to' : 'open';
-    const targetDisplay = isAnchor ? rawHref : (currentHoveredLink.getAttribute('title') || rawHref);
-    const prefix = isModDown ? 'Click' : modKeyHint;
-    linkHint.textContent = `${prefix} to ${action} ${targetDisplay}`;
+    if (!currentHint || !linkHint) return;
+    const isAnchor = currentHint.href.startsWith('#');
+    const prefix = document.body.classList.contains('mod-active') ? 'Click' : modKeyHint;
+    const target = isAnchor ? currentHint.href : (currentHint.label || currentHint.href);
+    linkHint.textContent = `${prefix} to ${isAnchor ? 'jump to' : 'open'} ${target}`;
   }
 
-  function positionHint(link) {
+  function positionHint(rect) {
     if (!linkHint) return;
-    const rect = link.getBoundingClientRect();
     const hintHeight = linkHint.offsetHeight || 24;
     const margin = 6;
     let top = rect.bottom + margin;
@@ -131,17 +157,17 @@
     linkHint.style.left = `${left}px`;
   }
 
-  function showHint(link) {
+  function showHint({ href, label = '', rect, element = null }) {
     const hint = ensureLinkHint();
-    if (!hint) return;
-    currentHoveredLink = link;
+    if (!hint || !href || !isAllowedLink(href)) { hideHint(); return; }
+    currentHint = { href, label, element };
     updateHintText();
     hint.classList.add('visible');
-    positionHint(link);
+    positionHint(rect);
   }
 
   function hideHint() {
-    currentHoveredLink = null;
+    currentHint = null;
     linkHint?.classList.remove('visible');
   }
 
@@ -233,7 +259,9 @@
       }
       return;
     }
-    postNativeMessage('openLink', fullHref || rawHref);
+    const target = fullHref || rawHref;
+    if (!isAllowedLink(rawHref) || !isAllowedLink(target)) return;
+    postNativeMessage('openLink', target);
   }
 
   function findLinkAtPosition(text, pos) {
@@ -293,7 +321,8 @@
       baseElement.href = base;
     }
     render(text);
-    document.getElementById('workspace').scrollTop = 0;
+    workspace.scrollTop = 0;
+    if (findOpen()) runFind({ fromCaret: true, reveal: false });
   }
 
   function switchMode() {
@@ -311,6 +340,7 @@
       source.focus();
     }
     updateWordCount();
+    if (findOpen()) runFind({ fromCaret: true });
   }
 
   function format(action) {
@@ -331,14 +361,378 @@
       case 'quote': block('blockquote'); break;
       case 'code': block('pre'); break;
       case 'rule': document.execCommand('insertHorizontalRule'); break;
-      case 'link': {
-        const url = prompt('Link URL', 'https://');
-        if (url && /^(https?:|mailto:|#|\.\.?\/)/i.test(url)) document.execCommand('createLink', false, url);
-        break;
-      }
+      case 'link': openLinkDialog(); return;
     }
     reportChange();
   }
+
+  function escapeHTML(text) {
+    return text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function linkAtSelection() {
+    const node = savedRange?.startContainer;
+    const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+    const anchor = element?.closest('a');
+    return anchor && editor.contains(anchor) ? anchor : null;
+  }
+
+  let editingLink = null;
+
+  function openLinkDialog() {
+    editingLink = linkAtSelection();
+    linkTitle.textContent = editingLink ? 'Edit link' : 'Insert link';
+    linkUrl.value = editingLink?.getAttribute('href') || '';
+    linkRemove.hidden = !editingLink;
+    linkError.textContent = '';
+    openDialog(linkDialog, linkUrl, editor);
+    linkUrl.select();
+  }
+
+  function restoreEditorSelection() {
+    editor.focus();
+    if (!savedRange) return;
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(savedRange);
+  }
+
+  function normalizeLinkAddress(value) {
+    let address = value.trim();
+    if (/^www\./i.test(address)) address = `https://${address}`;
+    // Relative file paths may contain spaces; URLs may not.
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(address)) address = address.replace(/ /g, '%20');
+    return address;
+  }
+
+  function applyLink(value) {
+    const address = normalizeLinkAddress(value);
+    if (!address) {
+      linkError.textContent = 'Enter a web address, email address, or file path.';
+      return false;
+    }
+    if (!isAllowedLink(address)) {
+      linkError.textContent = 'That kind of link cannot be used in a document.';
+      return false;
+    }
+    closeDialog();
+    restoreEditorSelection();
+    if (editingLink && editor.contains(editingLink)) {
+      editingLink.setAttribute('href', address);
+    } else if (!savedRange || savedRange.collapsed) {
+      document.execCommand('insertHTML', false, `<a href="${escapeHTML(address)}">${escapeHTML(address)}</a>`);
+    } else {
+      document.execCommand('createLink', false, address);
+    }
+    editingLink = null;
+    reportChange();
+    return true;
+  }
+
+  function removeLink() {
+    const anchor = editingLink;
+    closeDialog();
+    editingLink = null;
+    if (!anchor || !editor.contains(anchor)) return;
+    anchor.replaceWith(...anchor.childNodes);
+    restoreEditorSelection();
+    reportChange();
+  }
+
+  // ---- Find ----
+  // Matches are painted in #find-layer above the page, so searching never changes the
+  // document DOM (and so never marks the file dirty or affects the saved Markdown).
+  // Rich text: one box per Range client rect. Source: a mirror of the textarea text
+  // with <mark> elements, scrolled in step with the textarea.
+  const MAX_FIND_MATCHES = 5000;
+  const FIND_BLOCKS = 'p, li, h1, h2, h3, h4, h5, h6, pre, blockquote, td, th, dt, dd, figcaption';
+  let findMatches = [];
+  let findIndex = -1;
+  let findTruncated = false;
+  let findMirror = null;
+  let findRefreshTimer = null;
+
+  const nextFrame = (callback) => (window.requestAnimationFrame ? window.requestAnimationFrame(callback) : setTimeout(callback, 16));
+  const inSourceMode = () => document.body.classList.contains('source-mode');
+  const findOpen = () => !findBar.hidden;
+
+  function findPattern(query) {
+    return new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'giu');
+  }
+
+  // Concatenates the editor's text, with a newline between blocks and for <br>, and
+  // remembers where each text node starts so string offsets can become DOM positions.
+  function richTextIndex() {
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+      acceptNode: (node) => (node.nodeType === Node.TEXT_NODE || node.nodeName === 'BR'
+        ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP)
+    });
+    let text = '';
+    let lastBlock = null;
+    const segments = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (node.nodeName === 'BR') { text += '\n'; continue; }
+      const block = node.parentElement.closest(FIND_BLOCKS) || editor;
+      if (lastBlock && block !== lastBlock) text += '\n';
+      lastBlock = block;
+      segments.push({ node, start: text.length });
+      text += node.data;
+    }
+    return { text, segments };
+  }
+
+  function domPosition(segments, offset, isEnd) {
+    const target = isEnd ? offset - 1 : offset;
+    let low = 0;
+    let high = segments.length - 1;
+    while (low < high) {
+      const mid = (low + high + 1) >> 1;
+      if (segments[mid].start <= target) low = mid; else high = mid - 1;
+    }
+    const segment = segments[low];
+    return { node: segment.node, offset: offset - segment.start };
+  }
+
+  function computeMatches(query) {
+    findTruncated = false;
+    if (!query) return [];
+    const pattern = findPattern(query);
+    const text = inSourceMode() ? source.value : null;
+    const index = text === null ? richTextIndex() : null;
+    const haystack = text ?? index.text;
+    const matches = [];
+    let match;
+    while ((match = pattern.exec(haystack))) {
+      if (matches.length === MAX_FIND_MATCHES) { findTruncated = true; break; }
+      const start = match.index;
+      const end = start + match[0].length;
+      if (text !== null) {
+        matches.push({ start, end });
+      } else {
+        const from = domPosition(index.segments, start, false);
+        const to = domPosition(index.segments, end, true);
+        const range = document.createRange();
+        range.setStart(from.node, from.offset);
+        range.setEnd(to.node, to.offset);
+        matches.push(range);
+      }
+    }
+    return matches;
+  }
+
+  // Index of the first match at or after the caret, so a new search starts where you are.
+  function firstMatchFromCaret() {
+    if (!findMatches.length) return -1;
+    if (inSourceMode()) {
+      const caret = source.selectionStart || 0;
+      const found = findMatches.findIndex((m) => m.end > caret);
+      return found === -1 ? 0 : found;
+    }
+    if (!savedRange) return 0;
+    const found = findMatches.findIndex((range) => {
+      try { return range.compareBoundaryPoints(Range.END_TO_START, savedRange) >= 0; } catch (_) { return false; }
+    });
+    return found === -1 ? 0 : found;
+  }
+
+  function updateFindCount() {
+    const query = findInput.value;
+    findBar.classList.toggle('no-match', Boolean(query) && !findMatches.length);
+    if (!query) findCount.textContent = '';
+    else if (!findMatches.length) findCount.textContent = 'No matches';
+    else findCount.textContent = `${findIndex + 1} of ${findMatches.length}${findTruncated ? '+' : ''}`;
+  }
+
+  function paintFind() {
+    findLayer.textContent = '';
+    findMirror = null;
+    if (!findOpen() || !findMatches.length) return;
+    if (inSourceMode()) paintSourceMatches(); else paintRichMatches();
+  }
+
+  function paintRichMatches() {
+    const origin = paper.getBoundingClientRect();
+    const left = origin.left + paper.clientLeft;
+    const top = origin.top + paper.clientTop;
+    const boxes = document.createDocumentFragment();
+    findMatches.forEach((range, i) => {
+      if (typeof range.getClientRects !== 'function') return;
+      for (const rect of range.getClientRects()) {
+        if (!rect.width || !rect.height) continue;
+        const box = document.createElement('div');
+        box.className = i === findIndex ? 'find-hit current' : 'find-hit';
+        box.style.left = `${rect.left - left}px`;
+        box.style.top = `${rect.top - top}px`;
+        box.style.width = `${rect.width}px`;
+        box.style.height = `${rect.height}px`;
+        boxes.appendChild(box);
+      }
+    });
+    findLayer.appendChild(boxes);
+  }
+
+  // An element laid out exactly like the textarea's text, used to locate characters.
+  function createSourceMirror(className) {
+    const style = getComputedStyle(source);
+    const mirror = document.createElement('div');
+    mirror.className = className;
+    mirror.style.left = `${source.offsetLeft + source.clientLeft}px`;
+    mirror.style.top = `${source.offsetTop + source.clientTop}px`;
+    mirror.style.width = `${source.clientWidth}px`;
+    mirror.style.height = `${source.clientHeight}px`;
+    for (const side of ['Top', 'Right', 'Bottom', 'Left']) mirror.style[`padding${side}`] = style[`padding${side}`];
+    return mirror;
+  }
+
+  function paintSourceMatches() {
+    const mirror = createSourceMirror('find-mirror');
+    const text = source.value;
+    let last = 0;
+    findMatches.forEach((match, i) => {
+      mirror.appendChild(document.createTextNode(text.slice(last, match.start)));
+      const mark = document.createElement('mark');
+      if (i === findIndex) mark.className = 'current';
+      mark.textContent = text.slice(match.start, match.end);
+      mirror.appendChild(mark);
+      last = match.end;
+    });
+    // A trailing newline in a textarea still takes a line; keep the mirror's height equal.
+    mirror.appendChild(document.createTextNode(`${text.slice(last)}\n`));
+    findLayer.appendChild(mirror);
+    findMirror = mirror;
+    syncMirrorScroll();
+  }
+
+  function syncMirrorScroll() {
+    if (!findMirror) return;
+    findMirror.scrollTop = source.scrollTop;
+    findMirror.scrollLeft = source.scrollLeft;
+  }
+
+  function scrollWorkspaceToShow(clientTop, height) {
+    const view = workspace.getBoundingClientRect();
+    if (clientTop < view.top + 48 || clientTop + height > view.bottom - 48) {
+      workspace.scrollTop += clientTop - view.top - view.height / 3;
+    }
+  }
+
+  function revealCurrentMatch() {
+    if (findIndex < 0) return;
+    if (inSourceMode()) {
+      const mark = findMirror?.querySelector('mark.current');
+      if (!mark) return;
+      const top = mark.offsetTop;
+      const height = mark.offsetHeight;
+      if (top < source.scrollTop || top + height > source.scrollTop + source.clientHeight) {
+        source.scrollTop = Math.max(0, top - source.clientHeight / 3);
+        syncMirrorScroll();
+      }
+      scrollWorkspaceToShow(source.getBoundingClientRect().top + top - source.scrollTop, height);
+    } else {
+      const range = findMatches[findIndex];
+      if (typeof range.getBoundingClientRect !== 'function') return;
+      const rect = range.getBoundingClientRect();
+      scrollWorkspaceToShow(rect.top, rect.height);
+    }
+  }
+
+  // fromCaret: start at the match nearest the caret (new query). Otherwise keep the
+  // current position as closely as possible (document edits, mode switches).
+  function runFind({ fromCaret = false, reveal = true } = {}) {
+    const previous = findIndex;
+    findMatches = computeMatches(findInput.value);
+    if (!findMatches.length) findIndex = -1;
+    else if (fromCaret || previous < 0) findIndex = firstMatchFromCaret();
+    else findIndex = Math.min(previous, findMatches.length - 1);
+    paintFind();
+    if (reveal) revealCurrentMatch();
+    updateFindCount();
+  }
+
+  function selectedTextForFind() {
+    if (inSourceMode()) return source.value.slice(source.selectionStart, source.selectionEnd);
+    const selection = window.getSelection();
+    if (!selection.rangeCount || !editor.contains(selection.anchorNode)) return '';
+    return selection.toString();
+  }
+
+  function openFind() {
+    if (activeDialog) return;
+    const selected = selectedTextForFind();
+    const wasOpen = findOpen();
+    findBar.hidden = false;
+    if (selected && !selected.includes('\n') && selected.length <= 200) findInput.value = selected;
+    findInput.focus();
+    findInput.select();
+    if (!wasOpen || selected) runFind({ fromCaret: true });
+  }
+
+  function stepFind(direction) {
+    if (!findOpen()) { openFind(); if (!findMatches.length) return; }
+    if (!findMatches.length) runFind({ fromCaret: true, reveal: false });
+    if (!findMatches.length) return;
+    findIndex = (findIndex + direction + findMatches.length) % findMatches.length;
+    paintFind();
+    revealCurrentMatch();
+    updateFindCount();
+  }
+
+  // Closing leaves the current match selected in the document, ready to edit.
+  function closeFind() {
+    if (!findOpen()) return;
+    const current = findMatches[findIndex];
+    findBar.hidden = true;
+    findLayer.textContent = '';
+    findMirror = null;
+    findMatches = [];
+    findIndex = -1;
+    if (inSourceMode()) {
+      source.focus();
+      if (current) source.setSelectionRange(current.start, current.end);
+    } else {
+      editor.focus();
+      if (current && editor.contains(current.startContainer)) {
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(current);
+        savedRange = current.cloneRange();
+      }
+    }
+  }
+
+  function refreshFindSoon() {
+    if (!findOpen()) return;
+    clearTimeout(findRefreshTimer);
+    findRefreshTimer = setTimeout(() => runFind({ reveal: false }), 120);
+  }
+
+  let findRepaintQueued = false;
+  function repaintFindSoon() {
+    if (!findOpen() || findRepaintQueued) return;
+    findRepaintQueued = true;
+    nextFrame(() => { findRepaintQueued = false; paintFind(); });
+  }
+
+  findInput.addEventListener('input', () => runFind({ fromCaret: true }));
+  findInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      stepFind(event.shiftKey ? -1 : 1);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      closeFind();
+    }
+  });
+  document.getElementById('find-next').addEventListener('click', () => stepFind(1));
+  document.getElementById('find-prev').addEventListener('click', () => stepFind(-1));
+  document.getElementById('find-close').addEventListener('click', closeFind);
+  for (const button of findBar.querySelectorAll('button')) {
+    button.addEventListener('mousedown', (event) => event.preventDefault());
+  }
+  source.addEventListener('scroll', syncMirrorScroll, { passive: true });
+  window.addEventListener('resize', repaintFindSoon);
+  editor.addEventListener('load', repaintFindSoon, true);
 
   document.querySelectorAll('[data-action]').forEach((button) => {
     button.addEventListener('mousedown', (event) => event.preventDefault());
@@ -364,17 +758,27 @@
     brandMark.setAttribute('aria-expanded', String(open));
     if (!open && menuHadFocus) brandMark.focus();
   }
-  function openDialog(dialog) {
+  function openDialog(dialog, focusTarget = dialog.querySelector('.dialog-close'), returnFocus = brandMark) {
     setMenuOpen(false);
+    hideHint();
     activeDialog = dialog;
+    dialogReturnFocus = returnFocus;
     dialog.hidden = false;
-    dialog.querySelector('.dialog-close').focus();
+    focusTarget.focus();
   }
   function closeDialog() {
     if (!activeDialog) return;
     activeDialog.hidden = true;
     activeDialog = null;
-    brandMark.focus();
+    dialogReturnFocus?.focus();
+    dialogReturnFocus = null;
+  }
+  function trapDialogFocus(event) {
+    const focusable = [...activeDialog.querySelectorAll('button, input')].filter((el) => !el.hidden && !el.disabled);
+    if (!focusable.length) return;
+    const index = focusable.indexOf(document.activeElement);
+    const next = event.shiftKey ? index - 1 : index + 1;
+    focusable[(next + focusable.length) % focusable.length].focus();
   }
   brandMark.addEventListener('click', () => {
     const open = brandMenu.hidden;
@@ -394,7 +798,13 @@
   });
   document.getElementById('about-item').addEventListener('click', () => openDialog(about));
   document.getElementById('easter-egg-item').addEventListener('click', () => openDialog(easterEgg));
-  for (const dialog of [about, easterEgg]) {
+  linkForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    applyLink(linkUrl.value);
+  });
+  linkRemove.addEventListener('click', removeLink);
+  linkUrl.addEventListener('input', () => { linkError.textContent = ''; });
+  for (const dialog of [about, easterEgg, linkDialog]) {
     dialog.querySelector('.dialog-close').addEventListener('click', closeDialog);
     dialog.addEventListener('click', (event) => {
       if (event.target === dialog) closeDialog();
@@ -404,8 +814,8 @@
     if (!brandControl.contains(event.target)) setMenuOpen(false);
   });
   modeButton.addEventListener('click', switchMode);
-  editor.addEventListener('input', reportChange);
-  source.addEventListener('input', reportChange);
+  editor.addEventListener('input', () => { reportChange(); refreshFindSoon(); });
+  source.addEventListener('input', () => { reportChange(); refreshFindSoon(); });
   window.addEventListener('keydown', updateModState);
   window.addEventListener('keyup', updateModState);
   window.addEventListener('blur', () => {
@@ -413,11 +823,68 @@
     hideHint();
   });
 
+  // Source view: find the character under the pointer with an invisible mirror of
+  // the textarea text, then check whether it is inside a Markdown link or bare URL.
+  let hoverMirror = null;
+  let hoverMirrorKey = '';
+
+  function sourceOffsetAtPoint(x, y) {
+    if (typeof document.caretRangeFromPoint !== 'function') return null;
+    const key = `${source.clientWidth}x${source.clientHeight}`;
+    if (!hoverMirror || hoverMirror.firstChild?.data !== `${source.value}\n` || hoverMirrorKey !== key) {
+      hoverMirror?.remove();
+      hoverMirror = createSourceMirror('find-mirror hover-mirror');
+      hoverMirror.textContent = `${source.value}\n`;
+      paper.appendChild(hoverMirror);
+      hoverMirrorKey = key;
+    }
+    hoverMirror.scrollTop = source.scrollTop;
+    hoverMirror.scrollLeft = source.scrollLeft;
+    hoverMirror.style.pointerEvents = 'auto';
+    const caret = document.caretRangeFromPoint(x, y);
+    hoverMirror.style.pointerEvents = '';
+    const textNode = hoverMirror.firstChild;
+    if (!caret || caret.startContainer !== textNode) return null;
+    // caretRangeFromPoint gives the nearest caret; confirm the pointer is on a character.
+    for (const offset of [caret.startOffset, caret.startOffset - 1]) {
+      if (offset < 0 || offset >= source.value.length) continue;
+      const char = document.createRange();
+      char.setStart(textNode, offset);
+      char.setEnd(textNode, offset + 1);
+      const rect = char.getBoundingClientRect();
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return { offset, rect };
+    }
+    return null;
+  }
+
+  let sourceHoverEvent = null;
+  function updateSourceHover() {
+    const event = sourceHoverEvent;
+    sourceHoverEvent = null;
+    if (!event || !inSourceMode()) return;
+    const hit = sourceOffsetAtPoint(event.clientX, event.clientY);
+    const href = hit ? findLinkAtPosition(source.value, hit.offset) : null;
+    if (href) showHint({ href, rect: hit.rect });
+    else if (currentHint) hideHint();
+  }
+  source.addEventListener('mousemove', (event) => {
+    if (!sourceHoverEvent) nextFrame(updateSourceHover);
+    sourceHoverEvent = event;
+  });
+  source.addEventListener('mouseleave', () => { sourceHoverEvent = null; hideHint(); });
+  source.addEventListener('scroll', hideHint, { passive: true });
+  source.addEventListener('input', hideHint);
+
   editor.addEventListener('mouseover', (event) => {
     const link = event.target.closest('a');
     if (link) {
-      showHint(link);
-    } else if (currentHoveredLink && !currentHoveredLink.contains(event.target)) {
+      showHint({
+        href: link.getAttribute('href'),
+        label: link.getAttribute('title'),
+        rect: link.getBoundingClientRect(),
+        element: link
+      });
+    } else if (currentHint?.element && !currentHint.element.contains(event.target)) {
       hideHint();
     }
   });
@@ -429,7 +896,7 @@
     }
   });
 
-  document.getElementById('workspace')?.addEventListener('scroll', hideHint, { passive: true });
+  workspace.addEventListener('scroll', hideHint, { passive: true });
 
   editor.addEventListener('click', (event) => {
     const link = event.target.closest('a');
@@ -462,7 +929,7 @@
       if (event.key === 'Escape' || event.key === 'Tab') {
         event.preventDefault();
         if (event.key === 'Escape') closeDialog();
-        else activeDialog.querySelector('.dialog-close').focus();
+        else trapDialogFocus(event);
       }
       return;
     }
@@ -473,7 +940,17 @@
       return;
     }
     const isMod = isMac ? event.metaKey : event.ctrlKey;
-    if (isMod && event.shiftKey && event.key.toLowerCase() === 'm') {
+    const key = event.key.toLowerCase();
+    if (isMod && !event.shiftKey && !event.altKey && key === 'f') {
+      event.preventDefault();
+      openFind();
+    } else if ((isMod && !event.altKey && key === 'g') || event.key === 'F3') {
+      event.preventDefault();
+      stepFind(event.shiftKey ? -1 : 1);
+    } else if (event.key === 'Escape' && findOpen()) {
+      event.preventDefault();
+      closeFind();
+    } else if (isMod && event.shiftKey && event.key.toLowerCase() === 'm') {
       event.preventDefault();
       switchMode();
     } else if (isMod && !event.shiftKey && event.key.toLowerCase() === 's') {
@@ -507,6 +984,8 @@
       const s = saveBtn.querySelector('.shortcut');
       if (s) s.textContent = 'Ctrl+S';
     }
+    document.getElementById('find-prev').title = 'Previous match (Shift+F3)';
+    document.getElementById('find-next').title = 'Next match (F3)';
     const modeBtn = document.getElementById('mode');
     if (modeBtn) {
       modeBtn.title = 'Switch between rich text and Markdown source (Ctrl+Shift+M)';
@@ -542,7 +1021,10 @@
     preparePrint: () => {
       if (document.body.classList.contains('source-mode')) render(source.value);
     },
-    save: () => postNativeMessage('command', 'save')
+    save: () => postNativeMessage('command', 'save'),
+    find: openFind,
+    findNext: () => stepFind(1),
+    findPrevious: () => stepFind(-1)
   };
   setMarkdown('', 'Untitled.md', 'file:///');
   postNativeMessage('ready', true);

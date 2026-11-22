@@ -380,22 +380,7 @@ fn native_message(
         }
         "openLink" => {
             if let Some(serde_json::Value::String(url_str)) = data {
-                if let Ok(parsed) = Url::parse(&url_str) {
-                    if parsed.scheme() == "file" {
-                        if let Ok(file_path) = parsed.to_file_path() {
-                            let ext = file_path
-                                .extension()
-                                .and_then(|e| e.to_str())
-                                .unwrap_or("")
-                                .to_lowercase();
-                            if ext == "md" || ext == "markdown" || ext == "txt" {
-                                confirm_and_open_file(&window, file_path, &app);
-                                return;
-                            }
-                        }
-                    }
-                }
-                let _ = open::that(&url_str);
+                open_link(&window, &url_str, &app);
             }
         }
         "command" => {
@@ -414,6 +399,77 @@ fn native_message(
             }
         }
         _ => {}
+    }
+}
+
+const BLOCKED_LINK_SCHEMES: [&str; 5] = ["javascript", "vbscript", "data", "blob", "about"];
+const DOCUMENT_EXTENSIONS: [&str; 3] = ["md", "markdown", "txt"];
+
+#[derive(Debug, PartialEq)]
+enum LinkAction {
+    /// Unparseable, or a script-bearing / in-page scheme: do nothing.
+    Ignore,
+    /// A Markdown or text file: open it in this window.
+    OpenDocument(PathBuf),
+    /// A local file or folder that does not exist.
+    MissingFile(PathBuf),
+    /// Anything else: hand it to the desktop's default app for its scheme or file type.
+    External(String),
+}
+
+fn classify_link(url_str: &str) -> LinkAction {
+    let Ok(parsed) = Url::parse(url_str) else {
+        return LinkAction::Ignore;
+    };
+    if BLOCKED_LINK_SCHEMES.contains(&parsed.scheme()) {
+        return LinkAction::Ignore;
+    }
+    if parsed.scheme() != "file" {
+        return LinkAction::External(parsed.to_string());
+    }
+    let Ok(path) = parsed.to_file_path() else {
+        return LinkAction::Ignore;
+    };
+    if !path.exists() {
+        return LinkAction::MissingFile(path);
+    }
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    if DOCUMENT_EXTENSIONS.contains(&ext.as_str()) {
+        LinkAction::OpenDocument(path)
+    } else {
+        LinkAction::External(path.to_string_lossy().into_owned())
+    }
+}
+
+fn show_link_error(window: &WebviewWindow, message: String) {
+    window
+        .dialog()
+        .message(message)
+        .kind(MessageDialogKind::Error)
+        .title("Could Not Open Link")
+        .show(|_| {});
+}
+
+fn open_link(window: &WebviewWindow, url_str: &str, app: &AppHandle) {
+    match classify_link(url_str) {
+        LinkAction::Ignore => {}
+        LinkAction::OpenDocument(path) => confirm_and_open_file(window, path, app),
+        LinkAction::MissingFile(path) => {
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.to_string_lossy().into_owned());
+            show_link_error(window, format!("Could not find {}.", name));
+        }
+        LinkAction::External(target) => {
+            if let Err(err) = open::that(&target) {
+                show_link_error(window, format!("No app is available to open {}: {}", target, err));
+            }
+        }
     }
 }
 
@@ -447,6 +503,10 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &PredefinedMenuItem::copy(app, Some("Copy"))?,
             &PredefinedMenuItem::paste(app, Some("Paste"))?,
             &PredefinedMenuItem::select_all(app, Some("Select All"))?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, "find", "Find…", true, Some("CmdOrCtrl+F"))?,
+            &MenuItem::with_id(app, "find_next", "Find Next", true, Some("CmdOrCtrl+G"))?,
+            &MenuItem::with_id(app, "find_previous", "Find Previous", true, Some("CmdOrCtrl+Shift+G"))?,
         ],
     )?;
 
@@ -518,6 +578,9 @@ pub fn run() {
                         "print" => {
                             let _ = window.eval("editorAPI.print();");
                         }
+                        "find" => { let _ = window.eval("editorAPI.find();"); }
+                        "find_next" => { let _ = window.eval("editorAPI.findNext();"); }
+                        "find_previous" => { let _ = window.eval("editorAPI.findPrevious();"); }
                         "view_source" => {
                             let _ = window.eval("editorAPI.toggleSource();");
                         }
@@ -613,6 +676,43 @@ mod tests {
 
         let _ = fs::remove_file(&file);
         let _ = fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn test_classify_link() {
+        assert_eq!(classify_link("javascript:alert(1)"), LinkAction::Ignore);
+        assert_eq!(classify_link("JavaScript:alert(1)"), LinkAction::Ignore);
+        assert_eq!(classify_link("data:text/html,hi"), LinkAction::Ignore);
+        assert_eq!(classify_link("not a url"), LinkAction::Ignore);
+        assert_eq!(
+            classify_link("https://example.com/a?b=c"),
+            LinkAction::External("https://example.com/a?b=c".to_string())
+        );
+        assert_eq!(
+            classify_link("mailto:someone@example.com"),
+            LinkAction::External("mailto:someone@example.com".to_string())
+        );
+        assert_eq!(
+            classify_link("vscode://file/tmp/x"),
+            LinkAction::External("vscode://file/tmp/x".to_string())
+        );
+
+        let dir = std::env::temp_dir().join(format!("markdowndesk-link-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let note = dir.join("note.md");
+        let image = dir.join("photo.png");
+        std::fs::write(&note, "# hi").unwrap();
+        std::fs::write(&image, "png").unwrap();
+        let note_url = Url::from_file_path(&note).unwrap().to_string();
+        let image_url = Url::from_file_path(&image).unwrap().to_string();
+        let missing_url = Url::from_file_path(dir.join("missing.md")).unwrap().to_string();
+        assert_eq!(classify_link(&note_url), LinkAction::OpenDocument(note.clone()));
+        assert_eq!(
+            classify_link(&image_url),
+            LinkAction::External(image.to_string_lossy().into_owned())
+        );
+        assert_eq!(classify_link(&missing_url), LinkAction::MissingFile(dir.join("missing.md")));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

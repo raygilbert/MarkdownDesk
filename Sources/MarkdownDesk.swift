@@ -82,16 +82,7 @@ final class EditorController: NSObject, NSApplicationDelegate, NSWindowDelegate,
         case "changed": dirty = true
         case "openLink":
             guard let string = message.body as? String, let url = URL(string: string) else { return }
-            let scheme = url.scheme?.lowercased() ?? ""
-            if ["https", "http", "mailto"].contains(scheme) {
-                NSWorkspace.shared.open(url)
-            } else if scheme == "file" {
-                if ["md", "markdown", "txt"].contains(url.pathExtension.lowercased()) {
-                    open(url)
-                } else {
-                    NSWorkspace.shared.open(url)
-                }
-            }
+            openLink(url)
         case "command":
             guard let command = message.body as? String else { return }
             switch command {
@@ -107,17 +98,33 @@ final class EditorController: NSObject, NSApplicationDelegate, NSWindowDelegate,
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         if navigationAction.navigationType == .linkActivated {
-            if let url = navigationAction.request.url {
-                switch url.scheme?.lowercased() {
-                case "https", "http", "mailto": NSWorkspace.shared.open(url)
-                case "file" where ["md", "markdown"].contains(url.pathExtension.lowercased()): open(url)
-                default: break
-                }
-            }
+            if let url = navigationAction.request.url { openLink(url) }
             decisionHandler(.cancel)
             return
         }
         decisionHandler(.allow)
+    }
+
+    private static let blockedLinkSchemes: Set<String> = ["javascript", "vbscript", "data", "blob", "about"]
+    private static let documentExtensions: Set<String> = ["md", "markdown", "txt"]
+
+    /// Opens Markdown and text files in this window; hands every other link to the
+    /// app macOS has registered for it (browser, Mail, Finder, or a custom-scheme app).
+    private func openLink(_ url: URL) {
+        guard let scheme = url.scheme?.lowercased(), !Self.blockedLinkSchemes.contains(scheme) else { return }
+        if url.isFileURL {
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                showError("Could not find \(url.lastPathComponent).")
+                return
+            }
+            if Self.documentExtensions.contains(url.pathExtension.lowercased()) {
+                open(url)
+                return
+            }
+        }
+        if !NSWorkspace.shared.open(url) {
+            showError("No app is available to open \(url.absoluteString).")
+        }
     }
 
     private func jsString(_ value: String) -> String {
@@ -278,6 +285,9 @@ final class EditorController: NSObject, NSApplicationDelegate, NSWindowDelegate,
         }
     }
 
+    @objc private func find(_ sender: Any?) { webView.evaluateJavaScript("editorAPI.find()") }
+    @objc private func findNext(_ sender: Any?) { webView.evaluateJavaScript("editorAPI.findNext()") }
+    @objc private func findPrevious(_ sender: Any?) { webView.evaluateJavaScript("editorAPI.findPrevious()") }
     @objc private func toggleSource(_ sender: Any?) { webView.evaluateJavaScript("editorAPI.toggleSource()") }
     @objc private func format(_ sender: NSMenuItem) {
         guard let action = sender.representedObject as? String else { return }
@@ -330,6 +340,16 @@ final class EditorController: NSObject, NSApplicationDelegate, NSWindowDelegate,
         edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        edit.addItem(.separator())
+        let findItem = NSMenuItem(title: "Find", action: nil, keyEquivalent: "")
+        let findMenu = NSMenu(title: "Find")
+        findItem.submenu = findMenu
+        edit.addItem(findItem)
+        findMenu.addItem(withTitle: "Find…", action: #selector(find(_:)), keyEquivalent: "f").target = self
+        findMenu.addItem(withTitle: "Find Next", action: #selector(findNext(_:)), keyEquivalent: "g").target = self
+        let previousItem = findMenu.addItem(withTitle: "Find Previous", action: #selector(findPrevious(_:)), keyEquivalent: "G")
+        previousItem.keyEquivalentModifierMask = [.command, .shift]
+        previousItem.target = self
 
         let formatItem = NSMenuItem()
         main.addItem(formatItem)
