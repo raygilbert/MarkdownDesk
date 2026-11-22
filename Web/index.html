@@ -59,14 +59,38 @@
       <div class="toolbar-spacer"></div>
       <button id="mode" class="mode-button" title="Switch between rich text and Markdown source (⌘⇧M)">Source <span class="mode-glyph" aria-hidden="true">⌘⇧M</span></button>
     </div>
+    <div id="find-bar" role="search" aria-label="Find in document" hidden>
+      <svg class="find-icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5"/><path d="m12.3 12.3 4.2 4.2"/></svg>
+      <input id="find-input" type="search" placeholder="Find in document" aria-label="Find in document" autocomplete="off" spellcheck="false">
+      <span id="find-count" aria-live="polite"></span>
+      <button id="find-prev" class="tool-button icon-button" type="button" title="Previous match (⇧⌘G)" aria-label="Previous match"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 12.5 5-5 5 5"/></svg></button>
+      <button id="find-next" class="tool-button icon-button" type="button" title="Next match (⌘G)" aria-label="Next match"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5"/></svg></button>
+      <button id="find-close" class="tool-button icon-button" type="button" title="Close (Esc)" aria-label="Close find"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 6 8 8m0-8-8 8"/></svg></button>
+    </div>
     <main id="workspace">
       <div id="paper">
         <div class="paper-header" aria-hidden="true"><span>DOCUMENT</span><span class="paper-rule"></span><span>MD</span></div>
         <article id="editor" contenteditable="true" spellcheck="true" aria-label="Document"></article>
         <textarea id="source" spellcheck="false" aria-label="Markdown source"></textarea>
+        <div id="find-layer" aria-hidden="true"></div>
       </div>
     </main>
     <footer id="status"><span id="view-label">RICH TEXT</span><span id="wordcount">0 words</span></footer>
+  </div>
+  <div id="link-dialog" class="dialog-overlay" role="dialog" aria-modal="true" aria-labelledby="link-dialog-title" hidden>
+    <form id="link-form" class="dialog-card link-card" novalidate>
+      <button class="dialog-close" type="button" aria-label="Close">×</button>
+      <p class="dialog-eyebrow">LINK</p>
+      <h1 id="link-dialog-title">Insert link</h1>
+      <label for="link-url">Address</label>
+      <input id="link-url" type="text" autocomplete="off" spellcheck="false" placeholder="https://example.com">
+      <p class="link-help">Web address, email (mailto:), file path such as notes.md, or #heading.</p>
+      <p id="link-error" class="link-error" role="alert"></p>
+      <div class="link-actions">
+        <button id="link-remove" class="quiet-action" type="button">Remove link</button>
+        <button class="primary-action" type="submit">Apply</button>
+      </div>
+    </form>
   </div>
   <div id="about" class="dialog-overlay" role="dialog" aria-modal="true" aria-labelledby="about-title" hidden>
     <div class="dialog-card about-card">
@@ -75,7 +99,7 @@
       <h1 id="about-title">MarkdownDesk</h1>
       <p class="about-description">A calm place to write Markdown on your Mac. Open and save plain-text files, switch between rich text and Markdown source, then print or export to PDF.</p>
       <p class="about-credit">Created by Ray Gilbert with Codex, OpenAI’s coding agent.</p>
-      <p class="dialog-signature">OPEN SOURCE · VERSION 0.1.0</p>
+      <p class="dialog-signature">OPEN SOURCE · VERSION 0.2.0</p>
     </div>
   </div>
   <div id="easter-egg" class="dialog-overlay" role="dialog" aria-modal="true" aria-labelledby="easter-egg-title" hidden>
