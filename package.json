@@ -16,6 +16,7 @@
   "dependencies": {
     "dompurify": "3.4.17",
     "marked": "18.1.1",
+    "mermaid": "^12.2.0",
     "turndown": "7.2.4",
     "turndown-plugin-gfm": "1.0.2"
   },
