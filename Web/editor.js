@@ -931,7 +931,15 @@
       menuItems[event.key === 'Home' ? 0 : menuItems.length - 1].focus();
     }
   });
-  document.getElementById('about-item').addEventListener('click', () => openDialog(about));
+  document.getElementById('about-item').addEventListener('click', async () => {
+    try {
+      const res = await fetch('version.json');
+      const data = await res.json();
+      const sig = about.querySelector('.dialog-signature');
+      if (data.version) sig.textContent = `OPEN SOURCE · VERSION ${data.version}`;
+    } catch { /* keep static text if version.json is missing */ }
+    openDialog(about);
+  });
   document.getElementById('easter-egg-item').addEventListener('click', () => openDialog(easterEgg));
   linkForm.addEventListener('submit', (event) => {
     event.preventDefault();

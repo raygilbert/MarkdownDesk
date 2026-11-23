@@ -5,7 +5,7 @@
   <key>CFBundleDisplayName</key><string>MarkdownDesk</string>
   <key>CFBundleIdentifier</key><string>org.markdowndesk.editor</string>
   <key>CFBundleVersion</key><string>2</string>
-  <key>CFBundleShortVersionString</key><string>0.2.0</string>
+  <key>CFBundleShortVersionString</key><string>0.3.0</string>
   <key>CFBundleExecutable</key><string>MarkdownDesk</string>
   <key>CFBundleIconFile</key><string>MarkdownDesk.icns</string>
   <key>CFBundlePackageType</key><string>APPL</string>
