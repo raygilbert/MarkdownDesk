@@ -4,10 +4,17 @@ cd "${0:A:h}/.."
 BUILD_DIR="${MARKDOWNDESK_BUILD_DIR:-${PWD}/build}"
 APP="$BUILD_DIR/MarkdownDesk.app"
 node scripts/prepare-vendor.js
+# Generate version.json from Info.plist for the in-app About dialog
+if command -v /usr/libexec/PlistBuddy &>/dev/null; then
+  VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Info.plist 2>/dev/null | tr -d '"')
+  if [ -n "$VER" ]; then
+    echo "{\"version\":\"$VER\"}" > Web/version.json
+  fi
+fi
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/Web/vendor" "$APP/Contents/Resources/Licenses"
 cp Info.plist "$APP/Contents/Info.plist"
 /usr/bin/swift -module-cache-path "$BUILD_DIR/IconModuleCache" scripts/generate-icon.swift "$APP/Contents/Resources/MarkdownDesk.icns"
-cp Web/index.html Web/style.css Web/editor.js "$APP/Contents/Resources/Web/"
+cp Web/index.html Web/style.css Web/editor.js Web/version.json "$APP/Contents/Resources/Web/"
 cp Web/vendor/*.js "$APP/Contents/Resources/Web/vendor/"
 for name in marked dompurify turndown turndown-plugin-gfm mermaid; do
   cp "node_modules/$name/LICENSE" "$APP/Contents/Resources/Licenses/$name.txt"
